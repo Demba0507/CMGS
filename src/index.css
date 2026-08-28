@@ -1,0 +1,56 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Sora:wght@600;700;800&family=JetBrains+Mono:wght@500&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  font-family: 'Inter', system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: #d6d3d1;
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #a8a29e;
+}
+
+@layer components {
+  .card {
+    @apply bg-white rounded-xl shadow-card border border-sand-200/60;
+  }
+  .btn-primary {
+    @apply inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg bg-ocre-600 text-white font-medium text-sm transition-all hover:bg-ocre-700 active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed;
+  }
+  .btn-secondary {
+    @apply inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg bg-white border border-sand-300 text-sand-700 font-medium text-sm transition-all hover:bg-sand-50 active:scale-[0.98] disabled:opacity-50;
+  }
+  .btn-ghost {
+    @apply inline-flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-sand-600 font-medium text-sm transition-all hover:bg-sand-100;
+  }
+  .input {
+    @apply w-full px-3.5 py-2.5 rounded-lg border border-sand-300 bg-white text-sand-900 text-sm placeholder:text-sand-400 transition-all focus:outline-none focus:ring-2 focus:ring-ocre-400/40 focus:border-ocre-400;
+  }
+  .label {
+    @apply block text-sm font-medium text-sand-700 mb-1.5;
+  }
+  .badge {
+    @apply inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium;
+  }
+  .stat-card {
+    @apply card p-5 transition-all hover:shadow-card-hover;
+  }
+}
