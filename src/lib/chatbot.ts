@@ -110,6 +110,29 @@ function formatProductList(products: Product[]): string {
   return 'Voici les modèles disponibles :\n' + lines.join('\n');
 }
 
+/** Secours conversationnel (§ intégration DeepSeek) : uniquement utilisé quand le moteur à
+ *  mots-clés ne comprend pas la demande. N'intervient jamais sur les prix/stock/commandes,
+ *  qui restent entièrement gérés par le code déterministe ci-dessus. Si l'appel échoue
+ *  (fonction non déployée, clé non configurée, panne réseau), la conversation retombe
+ *  simplement sur les réponses par défaut existantes — rien ne casse. */
+async function tryDeepSeekFallback(
+  message: string,
+  history: { sender: 'CUSTOMER' | 'BOT'; content: string }[]
+): Promise<string | null> {
+  try {
+    const { data, error } = await supabase.functions.invoke('chat-ai', {
+      body: {
+        message,
+        history: history.slice(-6).map((m) => ({ role: m.sender === 'CUSTOMER' ? 'user' : 'assistant', content: m.content })),
+      },
+    });
+    if (error || typeof data?.reply !== 'string' || !data.reply.trim()) return null;
+    return data.reply.trim();
+  } catch {
+    return null;
+  }
+}
+
 /** Réponse standard quand le bot ne sait pas répondre : jamais d'invention, toujours une porte de sortie humaine (§35). */
 async function buildUnknownReply(): Promise<string> {
   const settings = await getPublicSettings();
@@ -137,7 +160,11 @@ function buildRecap(product: Product, qty: number, draft: CheckoutDraft): string
   ].join('\n');
 }
 
-export async function processMessage(text: string, ctx: BotContext): Promise<BotResult> {
+export async function processMessage(
+  text: string,
+  ctx: BotContext,
+  history: { sender: 'CUSTOMER' | 'BOT'; content: string }[] = []
+): Promise<BotResult> {
   const normalized = normalize(text);
   const draft = ctx.checkoutDraft ?? {};
 
@@ -358,9 +385,22 @@ export async function processMessage(text: string, ctx: BotContext): Promise<Bot
     };
   }
 
-  // Fallback — déterministe, n'invente jamais de donnée. Après 2 échecs consécutifs,
-  // le bot propose activement le relais humain plutôt que de tourner en boucle (§35).
+  // Fallback — le moteur à mots-clés ne comprend pas la demande. On tente d'abord un secours
+  // conversationnel via DeepSeek (jamais pour un prix/stock/commande — voir tryDeepSeekFallback
+  // et le system prompt de la fonction serveur) ; s'il n'est pas disponible, on retombe sur le
+  // comportement déterministe existant : jamais d'invention, toujours une porte de sortie humaine (§35).
   const nextStreak = (ctx.fallbackStreak ?? 0) + 1;
+  const aiReply = await tryDeepSeekFallback(text, history);
+  if (aiReply) {
+    const withHandoffNudge = nextStreak >= 3
+      ? `${aiReply}\n\nSouhaitez-vous que je vous mette en relation avec un conseiller CMGS ?`
+      : aiReply;
+    return {
+      reply: withHandoffNudge,
+      intent: 'AI_FALLBACK',
+      contextUpdates: { lastIntent: 'FALLBACK', fallbackStreak: nextStreak },
+    };
+  }
   if (nextStreak >= 2) {
     return {
       reply: await buildUnknownReply(),

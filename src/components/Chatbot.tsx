@@ -63,7 +63,7 @@ export default function Chatbot({ onClose, onAddToCart }: { onClose: () => void;
     }
 
     try {
-      const result = await processMessage(text, ctxRef.current);
+      const result = await processMessage(text, ctxRef.current, messages.map((m) => ({ sender: m.sender, content: m.content })));
       ctxRef.current = { ...ctxRef.current, ...result.contextUpdates };
 
       let finalReply = result.reply;
