@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react';
-import { Plus, Search, Package, Edit2, Trash2, X, AlertTriangle, Truck } from 'lucide-react';
+import { useState, useEffect, useRef } from 'react';
+import { Plus, Search, Package, Edit2, Trash2, X, AlertTriangle, Truck, ImagePlus } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { useConfirm } from '@/lib/confirm';
 import { useToast } from '@/lib/toast';
@@ -212,6 +212,46 @@ function ProductForm({ product, categories, suppliers, onClose, onSaved }: { pro
   });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [imageFile, setImageFile] = useState<File | null>(null);
+  const [imagePreview, setImagePreview] = useState<string>(product?.image_url ?? '');
+  const imageInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (!imageFile) return;
+    const previewUrl = URL.createObjectURL(imageFile);
+    setImagePreview(previewUrl);
+    return () => URL.revokeObjectURL(previewUrl);
+  }, [imageFile]);
+
+  const handleImageChange = (file: File | null) => {
+    if (!file) return;
+    if (!file.type.startsWith('image/')) {
+      setError('Veuillez sélectionner une image (JPG, PNG, WebP, etc.).');
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      setError('L’image ne doit pas dépasser 5 Mo.');
+      return;
+    }
+    setError(null);
+    setImageFile(file);
+  };
+
+  const uploadImage = async () => {
+    if (!imageFile) return form.image_url;
+    const extension = imageFile.name.split('.').pop()?.toLowerCase() || 'jpg';
+    const filePath = `products/${crypto.randomUUID()}.${extension}`;
+    const { error: uploadError } = await supabase.storage
+      .from('product-images')
+      .upload(filePath, imageFile, {
+        cacheControl: '3600',
+        upsert: false,
+        contentType: imageFile.type,
+      });
+    if (uploadError) throw new Error(`Échec de l’upload de l’image : ${uploadError.message}`);
+    const { data } = supabase.storage.from('product-images').getPublicUrl(filePath);
+    return data.publicUrl;
+  };
 
   const commission = Math.floor((form.purchase_price * 1) / 10000);
 
@@ -219,14 +259,17 @@ function ProductForm({ product, categories, suppliers, onClose, onSaved }: { pro
     if (!form.name || !form.code) { setError('Nom et code requis'); return; }
     setSaving(true);
     setError(null);
-    const payload = {
+    try {
+      const imageUrl = await uploadImage();
+      const payload = {
       ...form,
+      image_url: imageUrl || null,
       category_id: form.category_id || null,
       supplier_id: form.supplier_id || null,
       stock_last_checked: new Date().toISOString(),
       updated_at: new Date().toISOString(),
     };
-    if (product) {
+      if (product) {
       const { error } = await supabase.from('products').update(payload).eq('id', product.id);
       if (error) setError(error.message);
       else {
@@ -240,8 +283,12 @@ function ProductForm({ product, categories, suppliers, onClose, onSaved }: { pro
         await logAuditEvent('PRODUCT_CREATED', 'product', data?.id ?? null, `Produit créé : ${form.name}`, null, payload);
         onSaved();
       }
+      }
+      setSaving(false);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Impossible d’enregistrer le produit.');
+      setSaving(false);
     }
-    setSaving(false);
   };
 
   return (
@@ -272,7 +319,43 @@ function ProductForm({ product, categories, suppliers, onClose, onSaved }: { pro
             <div><label className="label">Stock vérifié</label><input type="number" min="0" className="input" value={form.stock_verified} onChange={(e) => setForm({ ...form, stock_verified: Math.max(0, parseInt(e.target.value) || 0) })} /></div>
             <div><label className="label">Seuil stock faible</label><input type="number" min="0" className="input" value={form.low_stock_threshold} onChange={(e) => setForm({ ...form, low_stock_threshold: Math.max(0, parseInt(e.target.value) || 0) })} /></div>
           </div>
-          <div><label className="label">URL image</label><input className="input" value={form.image_url} onChange={(e) => setForm({ ...form, image_url: e.target.value })} placeholder="https://..." /></div>
+          <div>
+            <label className="label">Image du produit</label>
+            <div className="flex items-center gap-4">
+              <button
+                type="button"
+                onClick={() => imageInputRef.current?.click()}
+                className="btn-secondary flex items-center gap-2"
+              >
+                <ImagePlus className="w-4 h-4" />
+                {imageFile ? 'Changer l’image' : 'Choisir une image'}
+              </button>
+              <input
+                ref={imageInputRef}
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={(e) => {
+                  handleImageChange(e.target.files?.[0] ?? null);
+                  e.currentTarget.value = '';
+                }}
+              />
+              {imagePreview && (
+                <div className="relative w-20 h-20 rounded-xl overflow-hidden border border-sand-200 bg-sand-50">
+                  <img src={imagePreview} alt="Aperçu" className="w-full h-full object-cover" />
+                  <button
+                    type="button"
+                    onClick={() => { setImageFile(null); setImagePreview(''); setForm({ ...form, image_url: '' }); }}
+                    className="absolute top-1 right-1 w-6 h-6 rounded-full bg-black/60 text-white flex items-center justify-center"
+                    title="Supprimer l’image"
+                  >
+                    <X className="w-3 h-3" />
+                  </button>
+                </div>
+              )}
+            </div>
+            <p className="text-xs text-sand-500 mt-2">JPG, PNG ou WebP · 5 Mo maximum</p>
+          </div>
 
           <div className="grid grid-cols-2 gap-4 p-4 bg-sand-50 rounded-xl">
             <div><div className="text-xs text-sand-500">Marge commerciale</div><div className="font-bold text-green-700">{formatFCFA(form.sale_price - form.purchase_price)}</div></div>
