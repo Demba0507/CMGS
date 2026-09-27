@@ -47,15 +47,15 @@ export function ToastProvider({ children }: { children: ReactNode }) {
           <div
             key={t.id}
             role="status"
-            className={`flex items-start gap-2.5 p-3.5 rounded-xl shadow-lg animate-slide-up border ${t.kind === 'success' ? 'bg-white border-green-200' : 'bg-white border-red-200'}`}
+            className={`flex items-start gap-2.5 p-3.5 rounded-xl shadow-lg animate-slide-up border ${t.kind === 'success' ? 'bg-white dark:bg-sand-800 border-green-200 dark:border-green-800' : 'bg-white dark:bg-sand-800 border-red-200 dark:border-red-800'}`}
           >
             {t.kind === 'success' ? (
-              <CheckCircle2 className="w-5 h-5 text-green-600 shrink-0 mt-0.5" />
+              <CheckCircle2 className="w-5 h-5 text-green-600 dark:text-green-400 shrink-0 mt-0.5" />
             ) : (
-              <XCircle className="w-5 h-5 text-red-600 shrink-0 mt-0.5" />
+              <XCircle className="w-5 h-5 text-red-600 dark:text-red-400 shrink-0 mt-0.5" />
             )}
-            <p className="text-sm text-sand-800 flex-1 min-w-0">{t.message}</p>
-            <button onClick={() => dismiss(t.id)} className="text-sand-400 hover:text-sand-600 shrink-0">
+            <p className="text-sm text-sand-800 dark:text-sand-100 flex-1 min-w-0">{t.message}</p>
+            <button onClick={() => dismiss(t.id)} className="text-sand-400 hover:text-sand-600 dark:hover:text-sand-200 shrink-0">
               <X className="w-4 h-4" />
             </button>
           </div>

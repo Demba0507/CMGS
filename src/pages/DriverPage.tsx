@@ -39,7 +39,7 @@ export default function DriverPage({ onBack }: { onBack: () => void }) {
   const doneDeliveries = deliveries.filter((d) => d.status === 'DELIVERED' || d.status === 'RETURNED');
 
   return (
-    <div className="min-h-screen bg-sand-50">
+    <div className="min-h-screen bg-sand-50 dark:bg-sand-900">
       <header className="bg-white border-b border-sand-200 px-4 sm:px-6 h-16 flex items-center justify-between sticky top-0 z-10">
         <div className="flex items-center gap-2"><Truck className="w-5 h-5 text-ocre-600" /><h1 className="font-display font-bold text-sand-900">Mes livraisons</h1></div>
         <button onClick={() => void logout()} className="p-2 rounded-lg hover:bg-sand-100 text-sand-600" title="Se déconnecter"><LogOut className="w-4 h-4" /></button>

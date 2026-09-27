@@ -3,6 +3,7 @@ import { supabase } from '@/lib/supabase';
 export interface CheckoutItemInput {
   product_id: string;
   quantity: number;
+  variant_id?: string | null;
 }
 
 export interface CheckoutResult {

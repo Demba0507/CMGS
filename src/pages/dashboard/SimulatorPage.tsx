@@ -4,6 +4,7 @@ import { supabase } from '@/lib/supabase';
 import type { Product, Customer } from '@/lib/types';
 import { processMessage, saveMessage, getFallbackReply, submitChatOrder, requestHumanHandoff, type BotContext } from '@/lib/chatbot';
 import { formatFCFA } from '@/lib/format';
+import { usePermissions } from '@/lib/permissions';
 
 interface SimMessage {
   id: string;
@@ -14,8 +15,10 @@ interface SimMessage {
 }
 
 export default function SimulatorPage() {
+  const { has } = usePermissions();
+  const canSimulate = has('chat.respond') && has('customers.edit');
   const [messages, setMessages] = useState<SimMessage[]>([
-    { id: 'init', sender: 'BOT', content: 'Bonjour 😊 Bienvenue chez CMGS ! Je peux vous aider à trouver un produit, vérifier un prix ou passer une commande. Que recherchez-vous ?', intent: 'GREETING' },
+    { id: 'init', sender: 'BOT', content: 'Bonjour 😊 Bienvenue chez RATELAFRICA ! Je peux vous aider à trouver un produit, vérifier un prix ou passer une commande. Que recherchez-vous ?', intent: 'GREETING' },
   ]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
@@ -23,6 +26,7 @@ export default function SimulatorPage() {
   const ctxRef = useRef<BotContext>({ conversationId: '', customerId: null, lastProducts: [], lastIntent: null, cart: [], checkoutDraft: {}, fallbackStreak: 0 });
 
   useEffect(() => {
+    if (!canSimulate) return;
     (async () => {
       const { data: existing } = await supabase.from('conversations').select('*').eq('channel', 'SIMULATOR').order('created_at', { ascending: false }).maybeSingle();
       let convId = existing?.id;
@@ -35,9 +39,9 @@ export default function SimulatorPage() {
         }
       }
       ctxRef.current.conversationId = convId ?? '';
-      if (convId) await saveMessage(convId, 'BOT', 'Bonjour 😊 Bienvenue chez CMGS ! Je peux vous aider à trouver un produit, vérifier un prix ou passer une commande. Que recherchez-vous ?', 'GREETING');
+      if (convId) await saveMessage(convId, 'BOT', 'Bonjour 😊 Bienvenue chez RATELAFRICA ! Je peux vous aider à trouver un produit, vérifier un prix ou passer une commande. Que recherchez-vous ?', 'GREETING');
     })();
-  }, []);
+  }, [canSimulate]);
 
   useEffect(() => { scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' }); }, [messages, loading]);
 
@@ -74,7 +78,7 @@ export default function SimulatorPage() {
   };
 
   const reset = () => {
-    setMessages([{ id: 'init', sender: 'BOT', content: 'Bonjour 😊 Bienvenue chez CMGS ! Que recherchez-vous ?', intent: 'GREETING' }]);
+    setMessages([{ id: 'init', sender: 'BOT', content: 'Bonjour 😊 Bienvenue chez RATELAFRICA ! Que recherchez-vous ?', intent: 'GREETING' }]);
     ctxRef.current = { conversationId: ctxRef.current.conversationId, customerId: ctxRef.current.customerId, lastProducts: [], lastIntent: null, cart: [], checkoutDraft: {}, fallbackStreak: 0 };
   };
 
@@ -90,19 +94,22 @@ export default function SimulatorPage() {
 
   return (
     <div className="p-6 animate-fade-in">
-      <div className="mb-4"><h2 className="font-display text-xl font-bold text-sand-900">Simulateur IA</h2><p className="text-sm text-sand-500">Testez le chatbot avec le vrai moteur CMGS — mêmes règles, même base de données</p></div>
+      <div className="mb-4"><h2 className="font-display text-xl font-bold text-sand-900 dark:text-sand-100">Simulateur IA</h2><p className="text-sm text-sand-500 dark:text-sand-400">Testez le chatbot avec le vrai moteur RATELAFRICA — mêmes règles, même base de données</p></div>
 
+      {!canSimulate ? (
+        <div className="card p-6 text-sm text-sand-600">Permission refusée : le simulateur nécessite les permissions « chat.respond » et « customers.edit ».</div>
+      ) : (
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         <div className="lg:col-span-2">
           <div className="card flex flex-col h-[600px]">
-            <div className="flex items-center justify-between p-4 border-b border-sand-200 bg-gradient-to-r from-ocre-600 to-ocre-700 text-white rounded-t-xl">
+            <div className="flex items-center justify-between p-4 border-b border-sand-200 dark:border-sand-700 bg-gradient-to-r from-ocre-600 to-ocre-700 text-white rounded-t-xl">
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 rounded-full bg-white/20 flex items-center justify-center"><Bot className="w-6 h-6" /></div>
-                <div><div className="font-display font-bold">Moteur CMGS</div><div className="text-xs text-ocre-100">Simulateur — Canal SIMULATOR</div></div>
+                <div><div className="font-display font-bold">Moteur RATELAFRICA</div><div className="text-xs text-ocre-100">Simulateur — Canal SIMULATOR</div></div>
               </div>
               <button onClick={reset} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white/20 hover:bg-white/30 text-sm transition-colors"><RotateCcw className="w-4 h-4" /> Réinitialiser</button>
             </div>
-            <div ref={scrollRef} className="flex-1 overflow-y-auto p-4 space-y-3 bg-sand-50">
+            <div ref={scrollRef} className="flex-1 overflow-y-auto p-4 space-y-3 bg-sand-50 dark:bg-sand-800">
               {messages.map((m) => (
                 <div key={m.id} className={`flex gap-2 ${m.sender === 'CUSTOMER' ? 'flex-row-reverse' : ''}`}>
                   <div className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 ${m.sender === 'CUSTOMER' ? 'bg-indigo-100' : 'bg-ocre-100'}`}>
@@ -133,9 +140,9 @@ export default function SimulatorPage() {
                 </div>
               )}
             </div>
-            <div className="p-3 border-t border-sand-200">
+            <div className="p-3 border-t border-sand-200 dark:border-sand-700">
               <div className="flex items-center gap-2">
-                <input type="text" value={input} onChange={(e) => setInput(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && send()} placeholder="Saisir un message..." className="flex-1 px-3.5 py-2.5 text-sm rounded-full border border-sand-300 bg-sand-50 focus:outline-none focus:ring-2 focus:ring-ocre-400/40 focus:bg-white" disabled={loading} />
+                <input type="text" value={input} onChange={(e) => setInput(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && send()} placeholder="Saisir un message..." className="flex-1 px-3.5 py-2.5 text-sm rounded-full border border-sand-300 bg-sand-50 dark:bg-sand-800 focus:outline-none focus:ring-2 focus:ring-ocre-400/40 focus:bg-white" disabled={loading} />
                 <button onClick={() => send()} disabled={loading || !input.trim()} className="w-10 h-10 rounded-full bg-ocre-600 text-white flex items-center justify-center hover:bg-ocre-700 disabled:opacity-50"><Send className="w-4 h-4" /></button>
               </div>
             </div>
@@ -147,7 +154,7 @@ export default function SimulatorPage() {
             <h3 className="font-semibold text-sand-900 text-sm mb-3">Scénarios de test</h3>
             <div className="space-y-1.5">
               {tests.map((t) => (
-                <button key={t.label} onClick={() => send(t.msg)} disabled={loading} className="w-full text-left px-3 py-2 rounded-lg bg-sand-50 hover:bg-ocre-50 hover:text-ocre-700 text-sm text-sand-700 transition-colors disabled:opacity-50">
+                <button key={t.label} onClick={() => send(t.msg)} disabled={loading} className="w-full text-left px-3 py-2 rounded-lg bg-sand-50 dark:bg-sand-800 hover:bg-ocre-50 hover:text-ocre-700 text-sm text-sand-700 transition-colors disabled:opacity-50">
                   <div className="font-medium">{t.label}</div>
                   <div className="text-xs text-sand-400 truncate">"{t.msg}"</div>
                 </button>
@@ -166,6 +173,7 @@ export default function SimulatorPage() {
           </div>
         </div>
       </div>
+      )}
     </div>
   );
 }

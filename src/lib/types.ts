@@ -4,14 +4,10 @@ export type CustomerStatus = 'PROSPECT' | 'CUSTOMER' | 'INACTIVE';
 export type OrderStatus =
   | 'PENDING'
   | 'CONFIRMED'
-  | 'PREPARING'
-  | 'READY_FOR_DELIVERY'
-  | 'OUT_FOR_DELIVERY'
   | 'DELIVERED'
   | 'CANCELLED'
-  | 'RETURNED'
-  | 'REFUNDED';
-export type PaymentMethod = 'CASH_ON_DELIVERY' | 'ORANGE_MONEY_MANUAL';
+  | 'RETURNED';
+export type PaymentMethod = 'CASH_ON_DELIVERY' | 'ORANGE_MONEY_MANUAL' | 'ORANGE_MONEY_AUTOMATIC';
 export type PaymentStatus = 'PENDING' | 'VERIFIED' | 'REJECTED' | 'REFUNDED';
 export type DriverStatus = 'AVAILABLE' | 'ASSIGNED' | 'PICKED_UP' | 'IN_TRANSIT' | 'DELIVERED' | 'FAILED' | 'RETURNED';
 export type Channel = 'WHATSAPP' | 'SITE' | 'INSTAGRAM' | 'FACEBOOK' | 'SIMULATOR';
@@ -49,8 +45,7 @@ export interface Product {
   supplier_id: string | null;
   supplier_price: number;
   sale_price: number;
-  stock_declared: number;
-  stock_verified: number;
+  stock: number;
   stock_last_checked: string | null;
   image_url: string | null;
   status: ProductStatus;
@@ -60,6 +55,52 @@ export interface Product {
   low_stock_threshold?: number;
   initial_supplier_price?: number;
   purchase_price?: number;
+  deleted_at?: string | null;
+  deleted_by?: string | null;
+}
+
+export interface HeroSlide {
+  id: string;
+  image_url: string;
+  title: string;
+  description: string | null;
+  button_text: string | null;
+  button_link: string | null;
+  position: number;
+  duration_seconds: number;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ProductImage {
+  id: string;
+  product_id: string;
+  image_url: string;
+  position: number;
+  is_primary: boolean;
+  color: string | null;
+  created_at: string;
+}
+
+export interface ProductVariant {
+  id: string;
+  product_id: string;
+  color: string | null;
+  size: string | null;
+  stock: number;
+  image_url: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface PublicVariant {
+  id: string;
+  color: string | null;
+  size: string | null;
+  image_url: string | null;
+  in_stock: boolean;
+  max_orderable: number;
 }
 
 export interface ProductSupplier {
@@ -69,23 +110,8 @@ export interface ProductSupplier {
   is_primary: boolean;
   initial_supplier_price: number;
   purchase_price: number;
-  declared_stock: number;
-  verified_stock: number;
-  last_verified_at: string | null;
   created_at: string;
   updated_at: string;
-}
-
-export interface SupplierStockReport {
-  id: string;
-  product_supplier_id: string;
-  declared_stock: number;
-  verified_stock: number | null;
-  reported_at: string;
-  verified_at: string | null;
-  reported_by: string | null;
-  verified_by: string | null;
-  note: string | null;
 }
 
 export interface StockMovement {
@@ -120,6 +146,8 @@ export interface Order {
   id: string;
   code: string;
   customer_id: string | null;
+  customer_name?: string | null;
+  customer_phone?: string | null;
   channel: Channel;
   status: OrderStatus;
   subtotal: number;
@@ -132,6 +160,8 @@ export interface Order {
   delivery_neighborhood: string | null;
   created_at: string;
   updated_at: string;
+  deleted_at?: string | null;
+  deleted_by?: string | null;
 }
 
 export interface OrderItem {
@@ -344,7 +374,7 @@ export interface PeriodFinancials {
   gross_margin: number;
   delivery_fees: number;
   supplier_commission: number;
-  cmgs_earnings: number;
+  ratel_earnings: number;
   orders_count: number;
   cancelled_count: number;
 }

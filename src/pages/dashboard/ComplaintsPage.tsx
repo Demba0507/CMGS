@@ -5,6 +5,7 @@ import { useToast } from '@/lib/toast';
 import type { Complaint, ComplaintMessage } from '@/lib/types';
 import { timeAgo } from '@/lib/format';
 import { COMPLAINT_STATUS_LABELS, COMPLAINT_STATUS_COLORS, CHANNEL_LABELS } from '@/lib/constants';
+import { usePermissions } from '@/lib/permissions';
 
 export default function ComplaintsPage() {
   const [complaints, setComplaints] = useState<Complaint[]>([]);
@@ -35,10 +36,10 @@ export default function ComplaintsPage() {
 
   if (loadError) {
     return (
-      <div className="p-6">
-        <div className="card p-5 flex items-start gap-3 bg-red-50 border-red-200">
-          <AlertCircle className="w-5 h-5 text-red-600 shrink-0 mt-0.5" />
-          <p className="text-sm text-red-700">{loadError}</p>
+      <div className="p-6 space-y-4 animate-fade-in">
+        <div className="card p-5 flex items-start gap-3 bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800">
+          <AlertCircle className="w-5 h-5 text-red-600 dark:text-red-400 shrink-0 mt-0.5" />
+          <p className="text-sm text-red-700 dark:text-red-400">{loadError}</p>
         </div>
       </div>
     );
@@ -48,8 +49,8 @@ export default function ComplaintsPage() {
     <div className="p-6 space-y-4 animate-fade-in">
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
-          <h2 className="font-display text-xl font-bold text-sand-900">{complaints.length} réclamations</h2>
-          <p className="text-sm text-sand-500">Service client</p>
+          <h2 className="font-display text-xl font-bold text-sand-900 dark:text-sand-100">{complaints.length} réclamations</h2>
+          <p className="text-sm text-sand-500 dark:text-sand-400">Service client</p>
         </div>
         <select className="input max-w-[200px]" value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)}>
           <option value="">Tous statuts</option>
@@ -62,7 +63,7 @@ export default function ComplaintsPage() {
       ) : (
         <div className="space-y-2">
           {filtered.map((c) => (
-            <div key={c.id} className="card p-4 cursor-pointer hover:bg-sand-50" onClick={() => setSelected(c)}>
+            <div key={c.id} className="card p-4 cursor-pointer hover:bg-sand-50 dark:hover:bg-sand-700" onClick={() => setSelected(c)}>
               <div className="flex items-center justify-between mb-1">
                 <span className="font-medium text-sand-900 text-sm">{c.subject}</span>
                 <span className={`badge ${COMPLAINT_STATUS_COLORS[c.status]}`}>{COMPLAINT_STATUS_LABELS[c.status]}</span>
@@ -83,6 +84,7 @@ export default function ComplaintsPage() {
 
 function ComplaintDetail({ complaint, onClose, onChanged }: { complaint: Complaint; onClose: () => void; onChanged: () => void }) {
   const toast = useToast();
+  const canManage = usePermissions().has('complaints.manage');
   const [messages, setMessages] = useState<ComplaintMessage[]>([]);
   const [loading, setLoading] = useState(true);
   const [reply, setReply] = useState('');
@@ -133,18 +135,20 @@ function ComplaintDetail({ complaint, onClose, onChanged }: { complaint: Complai
 
   return (
     <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4 animate-fade-in" onClick={onClose}>
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto animate-slide-up flex flex-col" onClick={(e) => e.stopPropagation()}>
-        <div className="flex items-center justify-between p-5 border-b border-sand-200 sticky top-0 bg-white z-10">
-          <div className="flex items-center gap-2"><MessageCircle className="w-5 h-5 text-ocre-600" /><h2 className="font-display text-lg font-bold text-sand-900">{complaint.subject}</h2></div>
-          <button onClick={onClose} className="w-8 h-8 rounded-lg hover:bg-sand-100 flex items-center justify-center"><X className="w-5 h-5" /></button>
+      <div className="bg-white dark:bg-sand-800 rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto animate-slide-up flex flex-col" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center justify-between p-5 border-b border-sand-200 dark:border-sand-700 sticky top-0 bg-white dark:bg-sand-800 z-10">
+          <div className="flex items-center gap-2"><MessageCircle className="w-5 h-5 text-ocre-600" /><h2 className="font-display text-lg font-bold text-sand-900 dark:text-sand-50">{complaint.subject}</h2></div>
+          <button onClick={onClose} className="w-8 h-8 rounded-lg hover:bg-sand-100 dark:hover:bg-sand-700 flex items-center justify-center"><X className="w-5 h-5" /></button>
         </div>
 
         <div className="p-5 space-y-3 flex-1">
-          <div className="flex gap-1.5 flex-wrap">
-            {Object.entries(COMPLAINT_STATUS_LABELS).map(([k, v]) => (
-              <button key={k} onClick={() => void changeStatus(k)} disabled={changingStatus} className={`text-xs px-2.5 py-1 rounded-lg font-medium disabled:opacity-50 ${complaint.status === k ? 'bg-ocre-600 text-white' : 'bg-sand-100 text-sand-600 hover:bg-sand-200'}`}>{v}</button>
-            ))}
-          </div>
+          {canManage && (
+            <div className="flex gap-1.5 flex-wrap">
+              {Object.entries(COMPLAINT_STATUS_LABELS).map(([k, v]) => (
+                <button key={k} onClick={() => void changeStatus(k)} disabled={changingStatus} className={`text-xs px-2.5 py-1 rounded-lg font-medium disabled:opacity-50 ${complaint.status === k ? 'bg-ocre-600 text-white' : 'bg-sand-100 text-sand-600 hover:bg-sand-200'}`}>{v}</button>
+              ))}
+            </div>
+          )}
 
           {loading ? (
             <p className="text-sm text-sand-400">Chargement...</p>
@@ -159,11 +163,13 @@ function ComplaintDetail({ complaint, onClose, onChanged }: { complaint: Complai
           )}
         </div>
 
-        <div className="p-4 border-t border-sand-200 flex gap-2">
-          <input className="input flex-1" placeholder="Répondre..." value={reply} onChange={(e) => setReply(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && void send()} />
-          <button onClick={() => void send()} disabled={sending || !reply.trim()} className="btn-primary px-4"><Send className="w-4 h-4" /></button>
-        </div>
-        {error && <p className="px-4 pb-3 text-xs text-red-600">{error}</p>}
+        {canManage && (
+          <div className="p-4 border-t border-sand-200 dark:border-sand-700 flex gap-2">
+            <input className="input flex-1" placeholder="Répondre..." value={reply} onChange={(e) => setReply(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && void send()} />
+            <button onClick={() => void send()} disabled={sending || !reply.trim()} className="btn-primary px-4"><Send className="w-4 h-4" /></button>
+          </div>
+        )}
+        {error && <p className="px-4 pb-3 text-xs text-red-600 dark:text-red-400">{error}</p>}
       </div>
     </div>
   );

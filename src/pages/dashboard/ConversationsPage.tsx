@@ -7,7 +7,9 @@ import { CHANNEL_LABELS } from '@/lib/constants';
 import { assignConversation, sendEmployeeMessage, closeConversation } from '@/lib/chatHandoff';
 import { deleteConversation, restoreConversation, purgeConversation } from '@/lib/maintenance';
 import { useToast } from '@/lib/toast';
-import ConfirmPasswordModal from '@/components/ConfirmPasswordModal';
+import { useConfirm } from '@/lib/confirm';
+import { usePermissions } from '@/lib/permissions';
+import TrashActionsBar from '@/components/TrashActionsBar';
 
 const CONVERSATION_STATUS_LABELS: Record<string, string> = {
   ACTIVE: 'Bot',
@@ -24,6 +26,9 @@ const CONVERSATION_STATUS_COLORS: Record<string, string> = {
 
 export default function ConversationsPage() {
   const toast = useToast();
+  const { confirmAction } = useConfirm();
+  const { has } = usePermissions();
+  const canDelete = has('conversations.delete');
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [messages, setMessages] = useState<Record<string, Message[]>>({});
@@ -32,8 +37,8 @@ export default function ConversationsPage() {
   const [reply, setReply] = useState('');
   const [sending, setSending] = useState(false);
   const [showTrash, setShowTrash] = useState(false);
-  const [confirmDelete, setConfirmDelete] = useState(false);
-  const [confirmPurge, setConfirmPurge] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [bulkBusy, setBulkBusy] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -98,17 +103,20 @@ export default function ConversationsPage() {
   const awaitingCount = conversations.filter((c) => c.status === 'AWAITING_HUMAN').length;
   const visibleConversations = conversations.filter((c) => (showTrash ? !!c.deleted_at : !c.deleted_at));
 
-  const doDelete = async () => {
+  const handleDelete = () => {
     if (!selected) return;
-    setConfirmDelete(false);
-    try {
-      await deleteConversation(selected.id);
-      setSelected(null);
-      void load();
-      toast.success('Conversation déplacée en corbeille.');
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Suppression impossible.');
-    }
+    confirmAction({
+      title: 'Supprimer cette conversation ?',
+      message: 'La conversation sera déplacée en corbeille et ne sera plus visible dans la liste active. Elle pourra être restaurée si besoin.',
+      danger: true,
+      confirmLabel: 'Supprimer',
+      successMessage: 'Conversation déplacée en corbeille.',
+      onConfirm: async () => {
+        await deleteConversation(selected.id);
+        setSelected(null);
+        void load();
+      },
+    });
   };
 
   const doRestore = async (c: Conversation) => {
@@ -122,36 +130,67 @@ export default function ConversationsPage() {
     }
   };
 
-  const doPurge = async () => {
-    if (!selected) return;
-    setConfirmPurge(false);
-    try {
-      await purgeConversation(selected.id);
-      setSelected(null);
-      void load();
-      toast.success('Conversation supprimée définitivement.');
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Suppression définitive impossible.');
-    }
+  const allSelected = visibleConversations.length > 0 && visibleConversations.every((c) => selectedIds.has(c.id));
+  const toggleAll = () => setSelectedIds(allSelected ? new Set() : new Set(visibleConversations.map((c) => c.id)));
+  const toggleOne = (id: string) => setSelectedIds((prev) => {
+    const next = new Set(prev);
+    if (next.has(id)) next.delete(id); else next.add(id);
+    return next;
+  });
+
+  const purgeMany = (ids: string[]) => {
+    if (ids.length === 0 || bulkBusy) return;
+    confirmAction({
+      title: ids.length === 1 ? 'Supprimer définitivement cette conversation ?' : `Supprimer définitivement ${ids.length} conversations ?`,
+      message: 'Cette action est irréversible : tous les messages seront effacés de façon permanente et ne pourront plus être restaurés.',
+      danger: true,
+      confirmLabel: 'Supprimer définitivement',
+      successMessage: ids.length === 1 ? 'Conversation supprimée définitivement.' : `${ids.length} conversations supprimées définitivement.`,
+      onConfirm: async () => {
+        setBulkBusy(true);
+        try {
+          for (const id of ids) await purgeConversation(id);
+        } finally {
+          setBulkBusy(false);
+        }
+        setSelectedIds(new Set());
+        if (selected && ids.includes(selected.id)) setSelected(null);
+        await load();
+      },
+    });
   };
 
   return (
     <div className="p-6 space-y-4 animate-fade-in">
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
-          <h2 className="font-display text-xl font-bold text-sand-900">{conversations.length} conversations</h2>
-          <p className="text-sm text-sand-500">
+          <h2 className="font-display text-xl font-bold text-sand-900 dark:text-sand-100">{conversations.length} conversations</h2>
+          <p className="text-sm text-sand-500 dark:text-sand-400">
             Consultez l'historique des conversations
             {awaitingCount > 0 && <span className="ml-2 text-red-600 font-medium">— {awaitingCount} en attente d'un conseiller</span>}
           </p>
         </div>
-        <button onClick={() => { setShowTrash((v) => !v); setSelected(null); }} className={`text-xs px-3 py-1.5 rounded-lg font-medium flex items-center gap-1.5 ${showTrash ? 'bg-ocre-600 text-white' : 'bg-sand-100 text-sand-600 hover:bg-sand-200'}`}>
-          <Trash2 className="w-3.5 h-3.5" /> {showTrash ? 'Retour aux conversations' : 'Corbeille'}
-        </button>
+        {canDelete && (
+          <button onClick={() => { setShowTrash((v) => !v); setSelected(null); setSelectedIds(new Set()); }} className={`text-xs px-3 py-1.5 rounded-lg font-medium flex items-center gap-1.5 ${showTrash ? 'bg-ocre-600 text-white' : 'bg-sand-100 text-sand-600 hover:bg-sand-200'}`}>
+            <Trash2 className="w-3.5 h-3.5" /> {showTrash ? 'Retour aux conversations' : 'Corbeille'}
+          </button>
+        )}
       </div>
 
+      {showTrash && visibleConversations.length > 0 && (
+        <TrashActionsBar
+          count={visibleConversations.length}
+          selectedCount={selectedIds.size}
+          allSelected={allSelected}
+          onToggleAll={toggleAll}
+          onDeleteSelected={() => purgeMany([...selectedIds])}
+          onEmptyTrash={() => purgeMany(visibleConversations.map((c) => c.id))}
+          busy={bulkBusy}
+        />
+      )}
+
       {visibleConversations.length === 0 ? (
-        <div className="card p-12 text-center"><MessageSquare className="w-12 h-12 text-sand-300 mx-auto mb-3" /><p className="text-sand-500">{showTrash ? 'La corbeille est vide.' : 'Aucune conversation enregistrée'}</p></div>
+        <div className="card p-12 text-center"><MessageSquare className="w-12 h-12 text-sand-300 mx-auto mb-3" /><p className="text-sand-500 dark:text-sand-400">{showTrash ? 'La corbeille est vide.' : 'Aucune conversation enregistrée'}</p></div>
       ) : (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
           <div className="lg:col-span-1 space-y-2">
@@ -160,14 +199,19 @@ export default function ConversationsPage() {
               const convMsgs = messages[c.id] ?? [];
               const lastMsg = convMsgs[convMsgs.length - 1];
               return (
-                <button key={c.id} onClick={() => setSelected(c)} className={`card p-4 w-full text-left hover:shadow-card-hover transition-all ${selected?.id === c.id ? 'ring-2 ring-ocre-400' : ''} ${c.status === 'AWAITING_HUMAN' ? 'border-red-300' : ''}`}>
-                  <div className="flex items-center justify-between mb-1 gap-2">
-                    <span className="font-medium text-sand-900 text-sm truncate">{customer?.name ?? 'Inconnu'}</span>
-                    <span className={`badge shrink-0 text-[10px] ${CONVERSATION_STATUS_COLORS[c.status] ?? 'bg-sand-100 text-sand-600'}`}>{CONVERSATION_STATUS_LABELS[c.status] ?? c.status}</span>
-                  </div>
-                  <p className="text-xs text-sand-500 truncate">{lastMsg?.content ?? 'Aucun message'}</p>
-                  <span className="text-[10px] text-sand-400">{timeAgo(c.updated_at)}</span>
-                </button>
+                <div key={c.id} className={`card p-4 w-full flex items-start gap-2 hover:shadow-card-hover transition-all ${selected?.id === c.id ? 'ring-2 ring-ocre-400' : ''} ${c.status === 'AWAITING_HUMAN' ? 'border-red-300' : ''}`}>
+                  {showTrash && (
+                    <input type="checkbox" checked={selectedIds.has(c.id)} onChange={() => toggleOne(c.id)} className="rounded mt-1 shrink-0" />
+                  )}
+                  <button onClick={() => setSelected(c)} className="flex-1 text-left min-w-0">
+                    <div className="flex items-center justify-between mb-1 gap-2">
+                      <span className="font-medium text-sand-900 text-sm truncate">{customer?.name ?? 'Inconnu'}</span>
+                      <span className={`badge shrink-0 text-[10px] ${CONVERSATION_STATUS_COLORS[c.status] ?? 'bg-sand-100 text-sand-600'}`}>{CONVERSATION_STATUS_LABELS[c.status] ?? c.status}</span>
+                    </div>
+                    <p className="text-xs text-sand-500 truncate">{lastMsg?.content ?? 'Aucun message'}</p>
+                    <span className="text-[10px] text-sand-400">{timeAgo(c.updated_at)}</span>
+                  </button>
+                </div>
               );
             })}
           </div>
@@ -175,10 +219,10 @@ export default function ConversationsPage() {
           <div className="lg:col-span-2">
             {selected ? (
               <div className="card flex flex-col h-[600px]">
-                <div className="flex items-center justify-between p-4 border-b border-sand-200">
+                <div className="flex items-center justify-between p-4 border-b border-sand-200 dark:border-sand-700">
                   <div>
-                    <h3 className="font-semibold text-sand-900">{customers.find((c) => c.id === selected.customer_id)?.name ?? 'Inconnu'}</h3>
-                    <span className="text-xs text-sand-500">{CHANNEL_LABELS[selected.channel]} — {formatDateTime(selected.created_at)}</span>
+                    <h3 className="font-semibold text-sand-900 dark:text-sand-100">{customers.find((c) => c.id === selected.customer_id)?.name ?? 'Inconnu'}</h3>
+                    <span className="text-xs text-sand-500 dark:text-sand-400">{CHANNEL_LABELS[selected.channel]} — {formatDateTime(selected.created_at)}</span>
                   </div>
                   <div className="flex items-center gap-1.5">
                     {!selected.deleted_at && selected.status !== 'CLOSED' && selected.status !== 'HUMAN_HANDLING' && (
@@ -187,18 +231,18 @@ export default function ConversationsPage() {
                     {!selected.deleted_at && selected.status !== 'CLOSED' && (
                       <button onClick={() => void close(selected)} className="text-xs px-2.5 py-1.5 rounded-lg bg-sand-100 text-sand-600 hover:bg-sand-200 flex items-center gap-1"><Lock className="w-3.5 h-3.5" /> Clôturer</button>
                     )}
-                    {selected.deleted_at ? (
+                    {canDelete && (selected.deleted_at ? (
                       <button onClick={() => void doRestore(selected)} className="text-xs px-2.5 py-1.5 rounded-lg bg-green-100 text-green-700 hover:bg-green-200 flex items-center gap-1"><ArchiveRestore className="w-3.5 h-3.5" /> Restaurer</button>
                     ) : (
-                      <button onClick={() => setConfirmDelete(true)} className="text-xs px-2.5 py-1.5 rounded-lg bg-red-100 text-red-700 hover:bg-red-200 flex items-center gap-1"><Trash2 className="w-3.5 h-3.5" /> Supprimer</button>
-                    )}
-                    {selected.deleted_at && (
-                      <button onClick={() => setConfirmPurge(true)} className="text-xs px-2.5 py-1.5 rounded-lg bg-red-600 text-white hover:bg-red-700 flex items-center gap-1"><Trash2 className="w-3.5 h-3.5" /> Supprimer définitivement</button>
+                      <button onClick={handleDelete} className="text-xs px-2.5 py-1.5 rounded-lg bg-red-100 text-red-700 hover:bg-red-200 flex items-center gap-1"><Trash2 className="w-3.5 h-3.5" /> Supprimer</button>
+                    ))}
+                    {canDelete && selected.deleted_at && (
+                      <button onClick={() => purgeMany([selected.id])} className="text-xs px-2.5 py-1.5 rounded-lg bg-red-600 text-white hover:bg-red-700 flex items-center gap-1"><Trash2 className="w-3.5 h-3.5" /> Supprimer définitivement</button>
                     )}
                     <button onClick={() => setSelected(null)} className="w-8 h-8 rounded-lg hover:bg-sand-100 flex items-center justify-center lg:hidden"><X className="w-5 h-5" /></button>
                   </div>
                 </div>
-                <div className="flex-1 overflow-y-auto p-4 space-y-3 bg-sand-50">
+                <div className="flex-1 overflow-y-auto p-4 space-y-3 bg-sand-50 dark:bg-sand-800">
                   {(messages[selected.id] ?? []).map((m) => (
                     <div key={m.id} className={`flex gap-2 ${m.sender === 'CUSTOMER' ? 'flex-row-reverse' : ''}`}>
                       <div className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 ${m.sender === 'CUSTOMER' ? 'bg-indigo-100' : m.sender === 'EMPLOYEE' ? 'bg-blue-100' : 'bg-ocre-100'}`}>
@@ -212,7 +256,7 @@ export default function ConversationsPage() {
                   ))}
                 </div>
                 {selected.status !== 'CLOSED' && (
-                  <div className="p-3 border-t border-sand-200 flex gap-2">
+                  <div className="p-3 border-t border-sand-200 dark:border-sand-700 flex gap-2">
                     <input className="input flex-1" placeholder="Répondre en tant que conseiller..." value={reply} onChange={(e) => setReply(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && void send()} />
                     <button onClick={() => void send()} disabled={sending || !reply.trim()} className="btn-primary px-4"><Send className="w-4 h-4" /></button>
                   </div>
@@ -225,22 +269,6 @@ export default function ConversationsPage() {
             )}
           </div>
         </div>
-      )}
-      {confirmDelete && (
-        <ConfirmPasswordModal
-          title="Supprimer la conversation"
-          description="La conversation sera déplacée en corbeille (récupérable) et non supprimée définitivement. Une sauvegarde récente (moins d'1h) est requise."
-          onCancel={() => setConfirmDelete(false)}
-          onConfirmed={() => void doDelete()}
-        />
-      )}
-      {confirmPurge && (
-        <ConfirmPasswordModal
-          title="Supprimer définitivement"
-          description="La conversation sera effacée de façon permanente, avec tous ses messages, et ne pourra plus être restaurée. Une sauvegarde récente (moins d'1h) est requise."
-          onCancel={() => setConfirmPurge(false)}
-          onConfirmed={() => void doPurge()}
-        />
       )}
     </div>
   );

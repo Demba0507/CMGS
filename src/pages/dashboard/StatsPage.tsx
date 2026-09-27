@@ -7,12 +7,26 @@ import { CHANNEL_LABELS, CUSTOMER_STATUS_LABELS } from '@/lib/constants';
 import { calculateSummary } from '@/lib/finance';
 import { listAccountingPeriods, getPeriodFinancials, closeAccountingPeriod } from '@/lib/accounting';
 import { useToast } from '@/lib/toast';
+import { useConfirm } from '@/lib/confirm';
 import ConfirmPasswordModal from '@/components/ConfirmPasswordModal';
 import ExportButtons from '@/components/ExportButtons';
 import type { ExportColumn } from '@/lib/export';
 
+type StatsRange = 'today' | '7d' | '30d' | '12m';
+const RANGE_LABELS: Record<StatsRange, string> = { today: "Aujourd'hui", '7d': '7 jours', '30d': '30 jours', '12m': '12 mois' };
+function rangeStart(range: StatsRange): Date {
+  const now = new Date();
+  switch (range) {
+    case 'today': return new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    case '7d': return new Date(now.getTime() - 7 * 86400000);
+    case '30d': return new Date(now.getTime() - 30 * 86400000);
+    case '12m': { const d = new Date(now); d.setMonth(d.getMonth() - 12); return d; }
+  }
+}
+
 function AccountingSection() {
   const toast = useToast();
+  const { confirmAction } = useConfirm();
   const [periods, setPeriods] = useState<AccountingPeriod[]>([]);
   const [selectedPeriodId, setSelectedPeriodId] = useState<string | null>(null);
   const [financials, setFinancials] = useState<PeriodFinancials | null>(null);
@@ -48,11 +62,18 @@ function AccountingSection() {
     }
   };
 
-  const close = async () => {
-    const label = prompt('Libellé de la nouvelle période (ex: 2026-10) :');
-    if (label === null) return;
-    setPendingLabel(label);
-    setShowPasswordConfirm(true);
+  const close = () => {
+    confirmAction({
+      title: 'Clôturer la période comptable',
+      message: 'Une nouvelle période comptable sera ouverte à partir de maintenant. Cette action nécessitera ensuite la confirmation de votre mot de passe.',
+      confirmLabel: 'Continuer',
+      successMessage: 'Confirmez votre mot de passe pour finaliser.',
+      input: { label: 'Libellé de la nouvelle période', placeholder: 'ex : 2026-10' },
+      onConfirm: (label) => {
+        setPendingLabel(label ?? '');
+        setShowPasswordConfirm(true);
+      },
+    });
   };
 
   const doClose = async () => {
@@ -73,7 +94,7 @@ function AccountingSection() {
   };
 
   if (loading) return null;
-  if (error) return <div className="card p-4 bg-red-50 border-red-200 text-sm text-red-700 mb-6">{error}</div>;
+  if (error) return <div className="card p-4 bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800 text-sm text-red-700 dark:text-red-400 mb-6">{error}</div>;
   if (!financials) return null;
 
   const currentPeriod = periods.find((p) => p.id === selectedPeriodId);
@@ -96,12 +117,12 @@ function AccountingSection() {
 
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         <FinLine label="Chiffre d'affaires" value={financials.sales_amount} />
-        <FinLine label="Prix d'achat CMGS" value={financials.purchase_amount} />
+        <FinLine label="Prix d'achat RATELAFRICA" value={financials.purchase_amount} />
         <FinLine label="Économie fournisseur" value={financials.supplier_savings} />
-        <FinLine label="Marge CMGS" value={financials.gross_margin} />
+        <FinLine label="Marge RATELAFRICA" value={financials.gross_margin} />
         <FinLine label="Frais de livraison" value={financials.delivery_fees} />
         <FinLine label="Commission fournisseur" value={financials.supplier_commission} />
-        <FinLine label="Bénéfice CMGS" value={financials.cmgs_earnings} highlight />
+        <FinLine label="Bénéfice RATELAFRICA" value={financials.ratel_earnings} highlight />
         <FinLine label="Commandes" value={financials.orders_count} isCount />
       </div>
       {currentPeriod?.status === 'CLOSED' && <p className="text-xs text-sand-400 mt-3">Période clôturée le {currentPeriod.closed_at ? formatDateTime(currentPeriod.closed_at) : ''} — lecture seule.</p>}
@@ -119,7 +140,7 @@ function AccountingSection() {
 
 function FinLine({ label, value, highlight, isCount }: { label: string; value: number; highlight?: boolean; isCount?: boolean }) {
   return (
-    <div className={`p-3 rounded-lg ${highlight ? 'bg-ocre-50' : 'bg-sand-50'}`}>
+    <div className={`p-3 rounded-lg ${highlight ? 'bg-ocre-50' : 'bg-sand-50 dark:bg-sand-800'}`}>
       <div className="text-xs text-sand-500 mb-0.5">{label}</div>
       <div className={`text-sm font-bold ${highlight ? 'text-ocre-700' : 'text-sand-900'}`}>{isCount ? value : formatFCFA(value)}</div>
     </div>
@@ -134,12 +155,13 @@ export default function StatsPage() {
   const [drivers, setDrivers] = useState<Driver[]>([]);
   const [items, setItems] = useState<OrderItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const [range, setRange] = useState<StatsRange>('30d');
 
   useEffect(() => {
     (async () => {
       const [{ data: o }, { data: p }, { data: c }, { data: s }, { data: d }, { data: i }] = await Promise.all([
-        supabase.from('orders').select('*'),
-        supabase.from('products').select('*'),
+        supabase.from('orders').select('*').is('deleted_at', null),
+        supabase.from('products').select('*').is('deleted_at', null),
         supabase.from('customers').select('*'),
         supabase.from('suppliers').select('*'),
         supabase.from('drivers').select('*'),
@@ -159,7 +181,7 @@ export default function StatsPage() {
     return <div className="flex justify-center py-12"><div className="w-8 h-8 border-2 border-ocre-600 border-t-transparent rounded-full animate-spin" /></div>;
   }
 
-  const delivered = orders.filter((o) => o.status === 'DELIVERED');
+  const delivered = orders.filter((o) => o.status === 'DELIVERED' && new Date(o.created_at) >= rangeStart(range));
   const deliveredItems = items.filter((i) => delivered.some((o) => o.id === i.order_id));
   const deliveryFees = delivered.reduce((s, o) => s + o.delivery_fee, 0);
   const serviceFees = delivered.reduce((s, o) => s + o.service_fee, 0);
@@ -190,8 +212,8 @@ export default function StatsPage() {
     productMap[key].revenue += i.unit_price * i.quantity;
   });
   const topProducts = Object.values(productMap).sort((a, b) => b.qty - a.qty).slice(0, 5);
-  const lowStock = products.filter((p) => p.stock_verified > 0 && p.stock_verified <= (p.low_stock_threshold ?? 5)).sort((a, b) => a.stock_verified - b.stock_verified);
-  const outOfStock = products.filter((p) => p.stock_verified <= 0);
+  const lowStock = products.filter((p) => p.stock > 0 && p.stock <= (p.low_stock_threshold ?? 5)).sort((a, b) => a.stock - b.stock);
+  const outOfStock = products.filter((p) => p.stock <= 0);
 
   // Supplier performance
   const supplierStats = suppliers.map((s) => {
@@ -209,19 +231,30 @@ export default function StatsPage() {
 
   return (
     <div className="p-6 space-y-6 animate-fade-in">
-      <div><h2 className="font-display text-xl font-bold text-sand-900">Statistiques</h2><p className="text-sm text-sand-500">Analyse complète de votre activité</p></div>
+      <div><h2 className="font-display text-xl font-bold text-sand-900 dark:text-sand-100">Statistiques</h2><p className="text-sm text-sand-500 dark:text-sand-400">Analyse complète de votre activité</p></div>
 
-      <div className="flex flex-wrap items-center gap-2">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex items-center gap-1 bg-sand-100 dark:bg-sand-800 p-1 rounded-lg">
+          {(Object.keys(RANGE_LABELS) as StatsRange[]).map((r) => (
+            <button
+              key={r}
+              onClick={() => setRange(r)}
+              className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${range === r ? 'bg-white dark:bg-sand-700 text-sand-900 dark:text-sand-100 shadow-sm' : 'text-sand-500 dark:text-sand-400 hover:text-sand-700'}`}
+            >
+              {RANGE_LABELS[r]}
+            </button>
+          ))}
+        </div>
         <ExportButtons
           filename="rapport-rentabilite-cmgs"
-          title="Rapport de rentabilité CMGS"
+          title="Rapport de rentabilité RATELAFRICA"
           columns={[
             { label: "Chiffre d'affaires", value: () => revenue },
             { label: 'Prix fournisseurs', value: () => revenue - margin },
             { label: 'Frais de livraison', value: () => deliveryFees },
             { label: 'Marge', value: () => margin },
             { label: 'Commission (0,01%)', value: () => commission },
-            { label: 'Résultat CMGS', value: () => result },
+            { label: 'Résultat RATELAFRICA', value: () => result },
           ] as ExportColumn<null>[]}
           rows={[null]}
         />
@@ -231,14 +264,14 @@ export default function StatsPage() {
 
       {/* Rentabilité */}
       <div className="card p-5">
-        <h3 className="font-semibold text-sand-900 mb-4 flex items-center gap-2"><DollarSign className="w-5 h-5 text-ocre-600" /> Rentabilité CMGS (toutes périodes confondues)</h3>
+        <h3 className="font-semibold text-sand-900 dark:text-sand-100 mb-4 flex items-center gap-2"><DollarSign className="w-5 h-5 text-ocre-600" /> Rentabilité RATELAFRICA — {RANGE_LABELS[range]}</h3>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
-          <div className="p-3 rounded-lg bg-green-50"><div className="text-sand-500 text-xs">Chiffre d'affaires</div><div className="font-bold text-green-700">{formatFCFA(revenue)}</div></div>
-          <div className="p-3 rounded-lg bg-red-50"><div className="text-sand-500 text-xs">Prix fournisseurs</div><div className="font-bold text-red-700">{formatFCFA(revenue - margin)}</div></div>
-          <div className="p-3 rounded-lg bg-ocre-50"><div className="text-sand-500 text-xs">Frais de livraison</div><div className="font-bold text-ocre-700">{formatFCFA(deliveryFees)}</div></div>
-          <div className="p-3 rounded-lg bg-indigo-50"><div className="text-sand-500 text-xs">Résultat CMGS</div><div className="font-bold text-indigo-700">{formatFCFA(result)}</div></div>
+          <div className="p-3 rounded-lg bg-green-50 dark:bg-green-900/20"><div className="text-sand-500 dark:text-sand-400 text-xs">Chiffre d'affaires</div><div className="font-bold text-green-700 dark:text-green-400">{formatFCFA(revenue)}</div></div>
+          <div className="p-3 rounded-lg bg-red-50 dark:bg-red-900/20"><div className="text-sand-500 dark:text-sand-400 text-xs">Prix fournisseurs</div><div className="font-bold text-red-700 dark:text-red-400">{formatFCFA(revenue - margin)}</div></div>
+          <div className="p-3 rounded-lg bg-ocre-50 dark:bg-ocre-900/20"><div className="text-sand-500 dark:text-sand-400 text-xs">Frais de livraison</div><div className="font-bold text-ocre-700 dark:text-ocre-400">{formatFCFA(deliveryFees)}</div></div>
+          <div className="p-3 rounded-lg bg-indigo-50 dark:bg-indigo-900/20"><div className="text-sand-500 dark:text-sand-400 text-xs">Résultat RATELAFRICA</div><div className="font-bold text-indigo-700 dark:text-indigo-400">{formatFCFA(result)}</div></div>
         </div>
-        <div className="mt-3 pt-3 border-t border-sand-100 flex flex-wrap gap-4 text-xs text-sand-500">
+        <div className="mt-3 pt-3 border-t border-sand-100 dark:border-sand-700 flex flex-wrap gap-4 text-xs text-sand-500 dark:text-sand-400">
           <span>Marge: <strong className="text-sand-700">{formatFCFA(margin)}</strong></span>
           <span>Commission (0,01%): <strong className="text-sand-700">{formatFCFA(commission)}</strong></span>
         </div>
@@ -265,8 +298,8 @@ export default function StatsPage() {
           <h3 className="font-semibold text-sand-900 mb-4 flex items-center gap-2"><Users className="w-5 h-5 text-indigo-600" /> Répartition clients</h3>
           <div className="grid grid-cols-3 gap-3">
             {customerStats.map((c) => (
-              <div key={c.status} className="text-center p-4 rounded-xl bg-sand-50">
-                <div className="font-display text-2xl font-bold text-sand-900">{c.count}</div>
+              <div key={c.status} className="text-center p-4 rounded-xl bg-sand-50 dark:bg-sand-800">
+                <div className="font-display text-2xl font-bold text-sand-900 dark:text-sand-100">{c.count}</div>
                 <div className="text-xs text-sand-500 mt-1">{CUSTOMER_STATUS_LABELS[c.status]}</div>
               </div>
             ))}
@@ -294,10 +327,10 @@ export default function StatsPage() {
           {topProducts.length === 0 ? <p className="text-sm text-sand-400">Aucune vente</p> : (
             <div className="space-y-2">
               {topProducts.map((p, i) => (
-                <div key={p.code} className="flex items-center gap-3 p-2 rounded-lg hover:bg-sand-50">
+                <div key={p.code} className="flex items-center gap-3 p-2 rounded-lg hover:bg-sand-50 dark:hover:bg-sand-700">
                   <span className="w-6 h-6 rounded-full bg-ocre-100 text-ocre-700 text-xs font-bold flex items-center justify-center">{i + 1}</span>
                   <div className="flex-1 min-w-0"><div className="text-sm font-medium text-sand-900 truncate">{p.name}</div><div className="font-mono text-xs text-sand-400">{p.code}</div></div>
-                  <div className="text-right"><div className="text-sm font-bold">{p.qty} vendus</div><div className="text-xs text-sand-500">{formatFCFA(p.revenue)}</div></div>
+                  <div className="text-right"><div className="text-sm font-bold">{p.qty} vendus</div><div className="text-xs text-sand-500 dark:text-sand-400">{formatFCFA(p.revenue)}</div></div>
                 </div>
               ))}
             </div>
@@ -308,12 +341,12 @@ export default function StatsPage() {
         <div className="card p-5">
           <h3 className="font-semibold text-sand-900 mb-4 flex items-center gap-2"><Package className="w-5 h-5 text-ocre-600" /> Alerte stock</h3>
           <div className="space-y-2">
-            {outOfStock.length > 0 && <div className="text-xs font-medium text-red-600 mb-2">Rupture de stock ({outOfStock.length})</div>}
+            {outOfStock.length > 0 && <div className="text-xs font-medium text-red-600 dark:text-red-400 mb-2">Rupture de stock ({outOfStock.length})</div>}
             {outOfStock.slice(0, 3).map((p) => (
-              <div key={p.id} className="flex items-center justify-between p-2 rounded-lg bg-red-50"><div className="flex items-center gap-2"><span className="font-mono text-xs text-sand-500">{p.code}</span><span className="text-sm text-sand-700">{p.name}</span></div><span className="badge bg-red-100 text-red-700">Épuisé</span></div>
+              <div key={p.id} className="flex items-center justify-between p-2 rounded-lg bg-red-50 dark:bg-red-900/20"><div className="flex items-center gap-2"><span className="font-mono text-xs text-sand-500 dark:text-sand-400">{p.code}</span><span className="text-sm text-sand-700 dark:text-sand-300">{p.name}</span></div><span className="badge bg-red-100 dark:bg-red-800 text-red-700 dark:text-red-200">Épuisé</span></div>
             ))}
             {lowStock.slice(0, 4).map((p) => (
-              <div key={p.id} className="flex items-center justify-between p-2 rounded-lg bg-ocre-50"><div className="flex items-center gap-2"><span className="font-mono text-xs text-sand-500">{p.code}</span><span className="text-sm text-sand-700">{p.name}</span></div><span className="badge bg-ocre-200 text-ocre-800">{p.stock_verified} restant</span></div>
+              <div key={p.id} className="flex items-center justify-between p-2 rounded-lg bg-ocre-50 dark:bg-ocre-900/20"><div className="flex items-center gap-2"><span className="font-mono text-xs text-sand-500 dark:text-sand-400">{p.code}</span><span className="text-sm text-sand-700 dark:text-sand-300">{p.name}</span></div><span className="badge bg-ocre-200 dark:bg-ocre-800 text-ocre-800 dark:text-ocre-200">{p.stock} restant</span></div>
             ))}
             {lowStock.length === 0 && outOfStock.length === 0 && <p className="text-sm text-sand-400">Tous les stocks sont sains</p>}
           </div>
@@ -340,9 +373,9 @@ export default function StatsPage() {
           </div>
           <div className="space-y-2">
             {supplierStats.map((s) => (
-              <div key={s.code} className="flex items-center justify-between p-2.5 rounded-lg bg-sand-50">
-                <div><div className="text-sm font-medium text-sand-900">{s.name}</div><div className="font-mono text-xs text-sand-400">{s.code} — {s.products} produits</div></div>
-                <div className="text-right"><div className="text-sm font-bold text-sand-900">{formatFCFA(s.revenue)}</div></div>
+              <div key={s.code} className="flex items-center justify-between p-2.5 rounded-lg bg-sand-50 dark:bg-sand-800">
+                <div><div className="text-sm font-medium text-sand-900 dark:text-sand-100">{s.name}</div><div className="font-mono text-xs text-sand-400">{s.code} — {s.products} produits</div></div>
+                <div className="text-right"><div className="text-sm font-bold text-sand-900 dark:text-sand-100">{formatFCFA(s.revenue)}</div></div>
               </div>
             ))}
           </div>
@@ -353,8 +386,8 @@ export default function StatsPage() {
           <h3 className="font-semibold text-sand-900 mb-4 flex items-center gap-2"><Bike className="w-5 h-5 text-indigo-600" /> Performance livreurs</h3>
           <div className="space-y-2">
             {driverStats.map((d) => (
-              <div key={d.code} className="flex items-center justify-between p-2.5 rounded-lg bg-sand-50">
-                <div><div className="text-sm font-medium text-sand-900">{d.name}</div><div className="font-mono text-xs text-sand-400">{d.code}</div></div>
+              <div key={d.code} className="flex items-center justify-between p-2.5 rounded-lg bg-sand-50 dark:bg-sand-800">
+                <div><div className="text-sm font-medium text-sand-900 dark:text-sand-100">{d.name}</div><div className="font-mono text-xs text-sand-400">{d.code}</div></div>
                 <span className="text-sm text-sand-700">{d.deliveries} livraison{d.deliveries > 1 ? 's' : ''}</span>
               </div>
             ))}

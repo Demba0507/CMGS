@@ -95,3 +95,18 @@ export async function resetEmployeePassword(email: string): Promise<void> {
   const { error } = await supabase.auth.resetPasswordForEmail(email, { redirectTo: `${window.location.origin}/#auth` });
   if (error) throw new Error("Impossible d'envoyer le lien de réinitialisation.");
 }
+
+/**
+ * Suppression définitive du compte Supabase Auth d'un employé (§41/§42).
+ * Contrairement à setEmployeeActive (désactivation réversible), cette action
+ * est irréversible : elle passe par l'Edge Function `delete-user-account`,
+ * seule habilitée à utiliser la clé service-role nécessaire à
+ * auth.admin.deleteUser(). La vérification de permission (employees.delete)
+ * est refaite côté serveur dans la fonction — ce point d'entrée frontend
+ * n'est qu'un confort d'appel, jamais la seule protection.
+ */
+export async function deleteEmployeeAccount(userId: string): Promise<void> {
+  const { data, error } = await supabase.functions.invoke('delete-user-account', { body: { user_id: userId } });
+  if (error) throw new Error(friendlyError(error, 'Impossible de supprimer ce compte.'));
+  if (data?.error) throw new Error(data.error);
+}

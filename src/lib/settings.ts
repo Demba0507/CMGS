@@ -6,6 +6,7 @@ export interface PublicSettings {
   'commerce.delivery_fee_default': number;
   'payments.cash_on_delivery_enabled': boolean;
   'payments.orange_money_manual_enabled': boolean;
+  'payments.orange_money_merchant_number': string;
   'chatbot.enabled': boolean;
   'customers.account_required': boolean;
   'service_client.phone_numbers': string[];
@@ -26,6 +27,7 @@ const PUBLIC_SETTINGS_DEFAULTS: PublicSettings = {
   'commerce.delivery_fee_default': 1000,
   'payments.cash_on_delivery_enabled': true,
   'payments.orange_money_manual_enabled': true,
+  'payments.orange_money_merchant_number': '',
   'chatbot.enabled': true,
   'customers.account_required': false,
   'service_client.phone_numbers': [],

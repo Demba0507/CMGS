@@ -21,9 +21,8 @@ function toCatalogProduct(product: PublicProductRow): Product {
     ...product,
     supplier_id: null,
     supplier_price: 0,
-    stock_declared: 0,
     // Quantité maximale commandable, plafonnée côté serveur (jamais le stock interne exact).
-    stock_verified: product.max_orderable,
+    stock: product.max_orderable,
     stock_last_checked: null,
   };
 }

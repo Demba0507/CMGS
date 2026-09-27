@@ -22,6 +22,8 @@ import StatsPage from '@/pages/dashboard/StatsPage';
 import LogsPage from '@/pages/dashboard/LogsPage';
 import MaintenancePage from '@/pages/dashboard/MaintenancePage';
 import SettingsPage from '@/pages/dashboard/SettingsPage';
+import HeroSlidesPage from '@/pages/dashboard/HeroSlidesPage';
+import TrashOverviewPage from '@/pages/dashboard/TrashOverviewPage';
 import { IdleLogoutGuard } from '@/lib/idleLogout';
 
 export default function Dashboard({ onLogout }: { onLogout: () => void }) {
@@ -53,6 +55,8 @@ export default function Dashboard({ onLogout }: { onLogout: () => void }) {
       {page === 'logs' && <LogsPage />}
       {page === 'maintenance' && <MaintenancePage />}
       {page === 'settings' && <SettingsPage />}
+      {page === 'hero-slides' && <HeroSlidesPage />}
+      {page === 'trash' && <TrashOverviewPage onNavigate={navigate} />}
     </DashboardLayout>
     </ConfirmProvider>
     </ToastProvider>

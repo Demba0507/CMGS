@@ -33,7 +33,7 @@ const fr = {
   'account.logout': 'Se déconnecter',
   'account.edit_profile': 'Modifier mon profil',
 
-  'chatbot.greeting': 'Bonjour 😊 Bienvenue chez CMGS ! Je peux vous aider à trouver un produit, vérifier un prix ou passer une commande. Que recherchez-vous ?',
+  'chatbot.greeting': 'Bonjour 😊 Bienvenue chez RATELAFRICA ! Je peux vous aider à trouver un produit, vérifier un prix ou passer une commande. Que recherchez-vous ?',
   'chatbot.placeholder': 'Écrivez votre message...',
 
   'common.cancel': 'Annuler',

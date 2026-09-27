@@ -104,7 +104,7 @@ async function getAllActiveProducts(): Promise<Product[]> {
 function formatProductList(products: Product[]): string {
   if (products.length === 0) return "Désolé, je n'ai trouvé aucun produit correspondant.";
   const lines = products.map((p, i) => {
-    const stock = p.stock_verified > 0 ? 'Disponible' : 'Rupture de stock';
+    const stock = p.stock > 0 ? 'Disponible' : 'Rupture de stock';
     return `${i + 1}. ${p.code} — ${p.name} (${formatFCFA(p.sale_price)}, ${stock})`;
   });
   return 'Voici les modèles disponibles :\n' + lines.join('\n');
@@ -141,7 +141,7 @@ async function buildUnknownReply(): Promise<string> {
   if (numbers && numbers.length > 0) {
     return `${base} Vous pouvez contacter notre équipe au ${numbers.join(' ou au ')}, ou me demander de vous mettre en relation avec un conseiller.`;
   }
-  return `${base} Je peux vous mettre en relation avec un conseiller CMGS si vous le souhaitez.`;
+  return `${base} Je peux vous mettre en relation avec un conseiller RATELAFRICA si vous le souhaitez.`;
 }
 
 function buildRecap(product: Product, qty: number, draft: CheckoutDraft): string {
@@ -171,7 +171,7 @@ export async function processMessage(
   // Demande explicite d'un humain — prioritaire sur tout le reste.
   if (HUMAN_WORDS.some((w) => normalized.includes(w))) {
     return {
-      reply: "Je transmets votre demande à notre équipe, un conseiller CMGS va prendre le relais de cette conversation dans quelques instants.",
+      reply: "Je transmets votre demande à notre équipe, un conseiller RATELAFRICA va prendre le relais de cette conversation dans quelques instants.",
       intent: 'HUMAN_HANDOFF_REQUESTED',
       action: 'REQUEST_HUMAN',
       contextUpdates: { lastIntent: 'HUMAN_HANDOFF_REQUESTED', fallbackStreak: 0 },
@@ -255,7 +255,7 @@ export async function processMessage(
   for (const w of GREETING_WORDS) {
     if (normalized === w || normalized.startsWith(w + ' ')) {
       return {
-        reply: 'Bonjour 😊 Bienvenue chez CMGS ! Je peux vous aider à trouver un produit, passer une commande ou suivre une livraison. Que recherchez-vous ?',
+        reply: 'Bonjour 😊 Bienvenue chez RATELAFRICA ! Je peux vous aider à trouver un produit, passer une commande ou suivre une livraison. Que recherchez-vous ?',
         intent: 'GREETING',
         contextUpdates: { lastIntent: 'GREETING', fallbackStreak: 0 },
       };
@@ -270,7 +270,7 @@ export async function processMessage(
       if (idx >= 0 && idx < ctx.lastProducts.length) {
         const p = ctx.lastProducts[idx];
         return {
-          reply: `${p.name} (${p.code}) coûte ${formatFCFA(p.sale_price)}. ${p.stock_verified > 0 ? 'Il est disponible.' : 'Actuellement en rupture de stock.'}`,
+          reply: `${p.name} (${p.code}) coûte ${formatFCFA(p.sale_price)}. ${p.stock > 0 ? 'Il est disponible.' : 'Actuellement en rupture de stock.'}`,
           intent: 'PRICE_QUERY',
           contextUpdates: { lastIntent: 'PRICE_QUERY', fallbackStreak: 0 },
         };
@@ -295,7 +295,7 @@ export async function processMessage(
   if (STOCK_WORDS.some((w) => normalized.includes(w))) {
     if (ctx.lastProducts.length > 0) {
       const p = ctx.lastProducts[0];
-      if (p.stock_verified > 0) {
+      if (p.stock > 0) {
         return {
           reply: `${p.name} (${p.code}) est actuellement disponible.`,
           intent: 'STOCK_QUERY',
@@ -337,9 +337,16 @@ export async function processMessage(
     }
     const product = extractOrdinalProduct(text, ctx.lastProducts) ?? ctx.lastProducts[0];
     const qty = extractQuantity(text);
-    if (qty > product.stock_verified) {
+    if (product.stock <= 0) {
       return {
-        reply: `Il ne reste actuellement que ${product.stock_verified} unité(s) disponible(s) pour ${product.name}. Voulez-vous en prendre ${product.stock_verified} ?`,
+        reply: `${product.name} est actuellement en rupture de stock. Souhaitez-vous voir un produit similaire ?`,
+        intent: 'STOCK_INSUFFICIENT',
+        contextUpdates: { lastIntent: 'STOCK_INSUFFICIENT', fallbackStreak: 0 },
+      };
+    }
+    if (qty > product.stock) {
+      return {
+        reply: `Cette quantité n'est pas disponible pour ${product.name}. Voulez-vous en prendre la quantité maximale disponible actuellement ?`,
         intent: 'STOCK_INSUFFICIENT',
         contextUpdates: { lastIntent: 'STOCK_INSUFFICIENT', fallbackStreak: 0 },
       };
@@ -393,7 +400,7 @@ export async function processMessage(
   const aiReply = await tryDeepSeekFallback(text, history);
   if (aiReply) {
     const withHandoffNudge = nextStreak >= 3
-      ? `${aiReply}\n\nSouhaitez-vous que je vous mette en relation avec un conseiller CMGS ?`
+      ? `${aiReply}\n\nSouhaitez-vous que je vous mette en relation avec un conseiller RATELAFRICA ?`
       : aiReply;
     return {
       reply: withHandoffNudge,

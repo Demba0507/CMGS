@@ -2,9 +2,10 @@ import { useState, type ReactNode } from 'react';
 import {
   LayoutDashboard, Package, Layers, Truck, Users, ShoppingCart,
   CreditCard, Bike, MessageSquare, Bot, Bell, BarChart3,
-  Settings, ScrollText, Store, ChevronLeft, ChevronRight, UserCog, RotateCcw, MessageCircle, Wrench, LogOut, Menu, X,
+  Settings, ScrollText, Store, ChevronLeft, ChevronRight, UserCog, RotateCcw, MessageCircle, Wrench, LogOut, Menu, X, Sun, Moon, Trash2, Image as ImageIcon,
 } from 'lucide-react';
 import { useCurrentProfile } from '@/lib/currentProfile';
+import { useTheme } from '@/lib/theme';
 
 export interface NavItem {
   id: string;
@@ -12,33 +13,66 @@ export interface NavItem {
   icon: typeof LayoutDashboard;
 }
 
-const NAV_ITEMS: NavItem[] = [
-  { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
-  { id: 'products', label: 'Produits', icon: Package },
-  { id: 'categories', label: 'Catégories', icon: Layers },
-  { id: 'suppliers', label: 'Fournisseurs', icon: Store },
-  { id: 'customers', label: 'Clients', icon: Users },
-  { id: 'employees', label: 'Employés', icon: UserCog },
-  { id: 'orders', label: 'Commandes', icon: ShoppingCart },
-  { id: 'payments', label: 'Paiements', icon: CreditCard },
-  { id: 'deliveries', label: 'Livraisons', icon: Truck },
-  { id: 'drivers', label: 'Livreurs', icon: Bike },
-  { id: 'conversations', label: 'Conversations', icon: MessageSquare },
-  { id: 'complaints', label: 'Réclamations', icon: MessageCircle },
-  { id: 'returns', label: 'Retours', icon: RotateCcw },
-  { id: 'simulator', label: 'Simulateur IA', icon: Bot },
-  { id: 'notifications', label: 'Relances', icon: Bell },
-  { id: 'stats', label: 'Statistiques', icon: BarChart3 },
-  { id: 'logs', label: 'Logs', icon: ScrollText },
-  { id: 'maintenance', label: 'Maintenance', icon: Wrench },
-  { id: 'settings', label: 'Paramètres', icon: Settings },
+export interface NavGroup {
+  label: string | null;
+  items: NavItem[];
+}
+
+// Étape 48 du prompt d'amélioration — organisation en groupes selon la
+// structure demandée (§46). Aucune page retirée : les éléments qui
+// n'apparaissaient pas explicitement dans la structure du cahier
+// (Simulateur IA, Carrousel boutique) sont replacés là où ils font le
+// plus sens. "Stock" n'a pas de page séparée : le stock est un champ du
+// produit depuis la simplification demandée par Demba (étape 13), donc
+// intégré à "Produits" plutôt que dupliqué. "Statistiques" couvre déjà
+// le chiffre d'affaires, les marges et la clôture comptable — renommé
+// "Comptabilité" et déplacé dans "Finance" pour correspondre au
+// vocabulaire du cahier, sans dupliquer la page.
+const NAV_GROUPS: NavGroup[] = [
+  { label: null, items: [
+    { id: 'dashboard', label: 'Vue d’ensemble', icon: LayoutDashboard },
+  ] },
+  { label: 'Commerce', items: [
+    { id: 'products', label: 'Produits', icon: Package },
+    { id: 'categories', label: 'Catégories', icon: Layers },
+    { id: 'orders', label: 'Commandes', icon: ShoppingCart },
+  ] },
+  { label: 'Utilisateurs', items: [
+    { id: 'customers', label: 'Clients', icon: Users },
+    { id: 'employees', label: 'Employés', icon: UserCog },
+    { id: 'drivers', label: 'Livreurs', icon: Bike },
+    { id: 'suppliers', label: 'Fournisseurs', icon: Store },
+  ] },
+  { label: 'Communication', items: [
+    { id: 'conversations', label: 'Conversations', icon: MessageSquare },
+    { id: 'notifications', label: 'Notifications', icon: Bell },
+    { id: 'simulator', label: 'Simulateur IA', icon: Bot },
+  ] },
+  { label: 'Opérations', items: [
+    { id: 'deliveries', label: 'Livraisons', icon: Truck },
+    { id: 'returns', label: 'Retours', icon: RotateCcw },
+    { id: 'complaints', label: 'Réclamations', icon: MessageCircle },
+  ] },
+  { label: 'Finance', items: [
+    { id: 'payments', label: 'Paiements', icon: CreditCard },
+    { id: 'stats', label: 'Comptabilité', icon: BarChart3 },
+  ] },
+  { label: 'Système', items: [
+    { id: 'hero-slides', label: 'Carrousel boutique', icon: ImageIcon },
+    { id: 'settings', label: 'Paramètres', icon: Settings },
+    { id: 'maintenance', label: 'Maintenance', icon: Wrench },
+    { id: 'logs', label: 'Logs', icon: ScrollText },
+    { id: 'trash', label: 'Corbeille', icon: Trash2 },
+  ] },
 ];
+const NAV_ITEMS: NavItem[] = NAV_GROUPS.flatMap((g) => g.items);
 
 export default function DashboardLayout({ active, onNavigate, onLogout, children }: { active: string; onNavigate: (id: string) => void; onLogout: () => void; children: ReactNode }) {
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [loggingOut, setLoggingOut] = useState(false);
   const { fullName, email } = useCurrentProfile();
+  const { theme, toggleTheme } = useTheme();
   const displayName = fullName || email || 'Utilisateur';
   const initials = displayName.trim().split(/\s+/).slice(0, 2).map((p) => p.charAt(0).toUpperCase()).join('') || '?';
 
@@ -58,7 +92,7 @@ export default function DashboardLayout({ active, onNavigate, onLogout, children
   };
 
   return (
-    <div className="flex h-screen bg-sand-50 overflow-hidden">
+    <div className="flex h-screen bg-sand-50 dark:bg-sand-900 overflow-hidden">
       {/* Fond semi-transparent affiché derrière le menu déroulant sur mobile uniquement */}
       {mobileOpen && (
         <div className="fixed inset-0 z-40 bg-black/40 lg:hidden" onClick={() => setMobileOpen(false)} />
@@ -69,28 +103,37 @@ export default function DashboardLayout({ active, onNavigate, onLogout, children
         className={`${collapsed ? 'lg:w-16' : 'lg:w-60'} fixed inset-y-0 left-0 z-50 w-72 max-w-[80vw] shrink-0 bg-sand-900 text-sand-300 flex flex-col transition-transform duration-200 lg:static lg:translate-x-0 lg:transition-all ${mobileOpen ? 'translate-x-0' : '-translate-x-full'}`}
       >
         <div className="h-16 flex items-center gap-2 px-4 border-b border-sand-800 shrink-0">
-          <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-ocre-500 to-ocre-700 flex items-center justify-center text-white font-bold text-sm font-display shrink-0">C</div>
-          {!collapsed && <span className="font-display font-bold text-white text-sm whitespace-nowrap">CMGS Commerce</span>}
+          <img src="/logo.png" alt="RATELAFRICA" className="w-9 h-9 rounded-lg object-contain shrink-0" />
+          {!collapsed && <span className="font-display font-bold text-white text-sm whitespace-nowrap">RATELAFRICA</span>}
           <button onClick={() => setMobileOpen(false)} className="ml-auto lg:hidden p-1.5 rounded-lg hover:bg-sand-800 text-sand-400" title="Fermer le menu">
             <X className="w-5 h-5" />
           </button>
         </div>
-        <nav className="flex-1 overflow-y-auto py-3 px-2 space-y-0.5">
-          {NAV_ITEMS.map((item) => {
-            const Icon = item.icon;
-            const isActive = active === item.id;
-            return (
-              <button
-                key={item.id}
-                onClick={() => handleNavigate(item.id)}
-                className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all ${isActive ? 'bg-ocre-600 text-white' : 'text-sand-400 hover:bg-sand-800 hover:text-white'}`}
-                title={item.label}
-              >
-                <Icon className="w-5 h-5 shrink-0" />
-                {!collapsed && <span className="whitespace-nowrap">{item.label}</span>}
-              </button>
-            );
-          })}
+        <nav className="flex-1 overflow-y-auto py-3 px-2 space-y-3">
+          {NAV_GROUPS.map((group, gi) => (
+            <div key={group.label ?? `group-${gi}`}>
+              {group.label && !collapsed && (
+                <div className="px-3 pb-1 pt-2 text-[11px] font-semibold uppercase tracking-wider text-sand-500">{group.label}</div>
+              )}
+              <div className="space-y-0.5">
+                {group.items.map((item) => {
+                  const Icon = item.icon;
+                  const isActive = active === item.id;
+                  return (
+                    <button
+                      key={item.id}
+                      onClick={() => handleNavigate(item.id)}
+                      className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all ${isActive ? 'bg-ocre-600 text-white' : 'text-sand-400 hover:bg-sand-800 hover:text-white'}`}
+                      title={item.label}
+                    >
+                      <Icon className="w-5 h-5 shrink-0" />
+                      {!collapsed && <span className="whitespace-nowrap">{item.label}</span>}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          ))}
         </nav>
         <button
           onClick={() => setCollapsed(!collapsed)}
@@ -102,22 +145,29 @@ export default function DashboardLayout({ active, onNavigate, onLogout, children
 
       {/* Main */}
       <div className="flex-1 flex flex-col overflow-hidden min-w-0">
-        <header className="h-16 bg-white border-b border-sand-200 flex items-center justify-between px-4 sm:px-6 shrink-0 gap-2">
+        <header className="h-16 bg-white dark:bg-sand-800 dark:border-sand-700 border-b border-sand-200 flex items-center justify-between px-4 sm:px-6 shrink-0 gap-2">
           <div className="flex items-center gap-2 min-w-0">
-            <button onClick={() => setMobileOpen(true)} className="lg:hidden p-2 -ml-2 rounded-lg hover:bg-sand-100 text-sand-600 shrink-0" title="Menu">
+            <button onClick={() => setMobileOpen(true)} className="lg:hidden p-2 -ml-2 rounded-lg hover:bg-sand-100 dark:hover:bg-sand-700 text-sand-600 dark:text-sand-300 shrink-0" title="Menu">
               <Menu className="w-5 h-5" />
             </button>
-            <h1 className="font-display text-lg font-bold text-sand-900 truncate">
+            <h1 className="font-display text-lg font-bold text-sand-900 dark:text-sand-50 truncate">
               {NAV_ITEMS.find((n) => n.id === active)?.label ?? 'Dashboard'}
             </h1>
           </div>
           <div className="flex items-center gap-3 shrink-0">
-            <span className="text-sm text-sand-500 hidden sm:block truncate max-w-[160px]" title={displayName}>{displayName}</span>
+            <button
+              onClick={toggleTheme}
+              className="w-9 h-9 rounded-lg hover:bg-sand-100 dark:hover:bg-sand-700 text-sand-500 dark:text-sand-300 flex items-center justify-center shrink-0"
+              title={theme === 'dark' ? 'Passer en mode clair' : 'Passer en mode sombre'}
+            >
+              {theme === 'dark' ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
+            </button>
+            <span className="text-sm text-sand-500 dark:text-sand-400 hidden sm:block truncate max-w-[160px]" title={displayName}>{displayName}</span>
             <div className="w-9 h-9 rounded-full bg-gradient-to-br from-indigo-500 to-indigo-700 flex items-center justify-center text-white font-medium text-sm shrink-0" title={displayName}>{initials}</div>
             <button
               onClick={() => void handleLogout()}
               disabled={loggingOut}
-              className="p-2 rounded-lg hover:bg-sand-100 text-sand-500 hover:text-sand-700 disabled:opacity-50 disabled:cursor-not-allowed"
+              className="p-2 rounded-lg hover:bg-sand-100 dark:hover:bg-sand-700 text-sand-500 dark:text-sand-300 hover:text-sand-700 dark:hover:text-sand-100 disabled:opacity-50 disabled:cursor-not-allowed"
               title="Se déconnecter"
             >
               {loggingOut ? (

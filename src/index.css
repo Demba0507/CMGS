@@ -13,6 +13,17 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
+/* Étape 37/38 : mode sombre. Le fond et le texte par défaut de toute page
+   basculent ici — chaque page hérite de ce fond via bg-sand-50 (déjà
+   utilisé partout comme fond de page) sans avoir besoin d'un dark: sur
+   chaque conteneur individuel. */
+html.dark body {
+  color-scheme: dark;
+}
+html.dark {
+  background-color: #1c1917;
+}
+
 ::-webkit-scrollbar {
   width: 8px;
   height: 8px;
@@ -27,25 +38,31 @@ body {
 ::-webkit-scrollbar-thumb:hover {
   background: #a8a29e;
 }
+html.dark ::-webkit-scrollbar-thumb {
+  background: #44403c;
+}
+html.dark ::-webkit-scrollbar-thumb:hover {
+  background: #57534e;
+}
 
 @layer components {
   .card {
-    @apply bg-white rounded-xl shadow-card border border-sand-200/60;
+    @apply bg-white rounded-xl shadow-card border border-sand-200/60 dark:bg-sand-800 dark:border-sand-700/60;
   }
   .btn-primary {
-    @apply inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg bg-ocre-600 text-white font-medium text-sm transition-all hover:bg-ocre-700 active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed;
+    @apply inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg bg-ocre-600 text-white font-medium text-sm transition-all hover:bg-ocre-700 active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed dark:bg-ocre-600 dark:hover:bg-ocre-500;
   }
   .btn-secondary {
-    @apply inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg bg-white border border-sand-300 text-sand-700 font-medium text-sm transition-all hover:bg-sand-50 active:scale-[0.98] disabled:opacity-50;
+    @apply inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg bg-white border border-sand-300 text-sand-700 font-medium text-sm transition-all hover:bg-sand-50 active:scale-[0.98] disabled:opacity-50 dark:bg-sand-800 dark:border-sand-600 dark:text-sand-200 dark:hover:bg-sand-700;
   }
   .btn-ghost {
-    @apply inline-flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-sand-600 font-medium text-sm transition-all hover:bg-sand-100;
+    @apply inline-flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-sand-600 font-medium text-sm transition-all hover:bg-sand-100 dark:text-sand-300 dark:hover:bg-sand-800;
   }
   .input {
-    @apply w-full px-3.5 py-2.5 rounded-lg border border-sand-300 bg-white text-sand-900 text-sm placeholder:text-sand-400 transition-all focus:outline-none focus:ring-2 focus:ring-ocre-400/40 focus:border-ocre-400;
+    @apply w-full px-3.5 py-2.5 rounded-lg border border-sand-300 bg-white text-sand-900 text-sm placeholder:text-sand-400 transition-all focus:outline-none focus:ring-2 focus:ring-ocre-400/40 focus:border-ocre-400 dark:bg-sand-800 dark:border-sand-600 dark:text-sand-100 dark:placeholder:text-sand-500;
   }
   .label {
-    @apply block text-sm font-medium text-sand-700 mb-1.5;
+    @apply block text-sm font-medium text-sand-700 mb-1.5 dark:text-sand-300;
   }
   .badge {
     @apply inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium;

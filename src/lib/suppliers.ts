@@ -1,17 +1,12 @@
 import { supabase } from '@/lib/supabase';
 import { friendlyError } from '@/lib/errors';
-import type { ProductSupplier, SupplierStockReport } from '@/lib/types';
+import type { ProductSupplier } from '@/lib/types';
 
+/** Fournisseurs liés à un produit, avec leurs prix — comparaison indépendante du stock. */
 export async function listProductSuppliers(productId: string): Promise<ProductSupplier[]> {
   const { data, error } = await supabase.from('product_suppliers').select('*').eq('product_id', productId).order('is_primary', { ascending: false });
   if (error) throw new Error('Impossible de charger les fournisseurs de ce produit.');
   return (data as ProductSupplier[]) ?? [];
-}
-
-export async function listStockReports(productSupplierId: string): Promise<SupplierStockReport[]> {
-  const { data, error } = await supabase.from('supplier_stock_reports').select('*').eq('product_supplier_id', productSupplierId).order('reported_at', { ascending: false }).limit(20);
-  if (error) throw new Error("Impossible de charger l'historique de stock.");
-  return (data as SupplierStockReport[]) ?? [];
 }
 
 export async function addProductSupplier(productId: string, supplierId: string, initialSupplierPrice: number, purchasePrice: number, makePrimary: boolean): Promise<ProductSupplier> {
@@ -31,18 +26,6 @@ export async function setPrimarySupplier(productId: string, supplierId: string):
 export async function removeProductSupplier(productSupplierId: string): Promise<void> {
   const { error } = await supabase.rpc('remove_product_supplier', { p_product_supplier_id: productSupplierId });
   if (error) throw new Error(friendlyError(error, 'Impossible de retirer ce fournisseur.'));
-}
-
-export async function declareSupplierStock(productSupplierId: string, declaredStock: number, note?: string): Promise<SupplierStockReport> {
-  const { data, error } = await supabase.rpc('declare_supplier_stock', { p_product_supplier_id: productSupplierId, p_declared_stock: declaredStock, p_note: note ?? null });
-  if (error) throw new Error(friendlyError(error, 'Impossible de déclarer ce stock.'));
-  return data as SupplierStockReport;
-}
-
-export async function verifySupplierStock(reportId: string, verifiedStock: number, note?: string): Promise<SupplierStockReport> {
-  const { data, error } = await supabase.rpc('verify_supplier_stock', { p_report_id: reportId, p_verified_stock: verifiedStock, p_note: note ?? null });
-  if (error) throw new Error(friendlyError(error, 'Impossible de vérifier ce stock.'));
-  return data as SupplierStockReport;
 }
 
 /** Supprime un fournisseur (déplacement en corbeille — voir migration 023). */

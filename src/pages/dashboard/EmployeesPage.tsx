@@ -1,9 +1,9 @@
 import { useState, useEffect, useCallback } from 'react';
-import { UserPlus, X, ShieldCheck, Power, KeyRound, Mail, AlertCircle, Clock, Search } from 'lucide-react';
+import { UserPlus, X, ShieldCheck, Power, KeyRound, Mail, AlertCircle, Clock, Search, Trash2 } from 'lucide-react';
 import {
   listEmployees, listRoles, listPermissions, listPendingInvitations,
   inviteEmployee, revokeInvitation, setEmployeeRole, setEmployeeActive,
-  setPermissionOverride, removePermissionOverride, resetEmployeePassword,
+  setPermissionOverride, removePermissionOverride, resetEmployeePassword, deleteEmployeeAccount,
 } from '@/lib/employees';
 import { useConfirm } from '@/lib/confirm';
 import { useToast } from '@/lib/toast';
@@ -25,6 +25,8 @@ function employeeExportColumns(roleName: (code: string | null) => string): Expor
 
 export default function EmployeesPage() {
   const { confirmAction } = useConfirm();
+  const { has } = usePermissions();
+  const canCreate = has('employees.create');
   const [employees, setEmployees] = useState<EmployeeWithRole[]>([]);
   const [invitations, setInvitations] = useState<EmployeeInvitation[]>([]);
   const [roles, setRoles] = useState<Role[]>([]);
@@ -61,10 +63,10 @@ export default function EmployeesPage() {
 
   if (loadError) {
     return (
-      <div className="p-6">
-        <div className="card p-5 flex items-start gap-3 bg-red-50 border-red-200">
-          <AlertCircle className="w-5 h-5 text-red-600 shrink-0 mt-0.5" />
-          <p className="text-sm text-red-700">{loadError}</p>
+      <div className="p-6 space-y-4 animate-fade-in">
+        <div className="card p-5 flex items-start gap-3 bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800">
+          <AlertCircle className="w-5 h-5 text-red-600 dark:text-red-400 shrink-0 mt-0.5" />
+          <p className="text-sm text-red-700 dark:text-red-400">{loadError}</p>
         </div>
       </div>
     );
@@ -99,14 +101,14 @@ export default function EmployeesPage() {
 
   return (
     <div className="p-6 space-y-6 animate-fade-in">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
-          <h2 className="font-display text-xl font-bold text-sand-900">{employees.length} employés</h2>
-          <p className="text-sm text-sand-500">Rôles, statuts et permissions individuelles</p>
+          <h2 className="font-display text-xl font-bold text-sand-900 dark:text-sand-100">{employees.length} employés</h2>
+          <p className="text-sm text-sand-500 dark:text-sand-400">Rôles, statuts et permissions individuelles</p>
         </div>
         <div className="flex items-center gap-2">
-          <ExportButtons filename="employes-cmgs" title="Employés CMGS" columns={employeeExportColumns(roleName)} rows={filteredEmployees} />
-          <button onClick={() => setShowInvite(true)} className="btn-primary flex items-center gap-2"><UserPlus className="w-4 h-4" /> Inviter un employé</button>
+          <ExportButtons filename="employes-ratelafrica" title="Employés RATELAFRICA" columns={employeeExportColumns(roleName)} rows={filteredEmployees} />
+          {canCreate && <button onClick={() => setShowInvite(true)} className="btn-primary flex items-center gap-2"><UserPlus className="w-4 h-4" /> Inviter un employé</button>}
         </div>
       </div>
 
@@ -131,11 +133,11 @@ export default function EmployeesPage() {
           <h3 className="font-semibold text-sand-900 mb-3 text-sm flex items-center gap-2"><Clock className="w-4 h-4 text-ocre-600" /> Invitations en attente ({invitations.length})</h3>
           <div className="space-y-2">
             {invitations.map((inv) => (
-              <div key={inv.email} className="flex items-center justify-between p-2.5 rounded-lg bg-sand-50 text-sm">
-                <div><span className="font-medium text-sand-900">{inv.email}</span><span className="text-sand-400 ml-2">— {roleName(inv.role_code)}</span></div>
-                <div className="flex items-center gap-3">
-                  <span className="text-xs text-sand-400">Envoyée {timeAgo(inv.invited_at)}</span>
-                  <button onClick={() => handleRevoke(inv.email)} className="text-xs px-2.5 py-1 rounded-lg bg-red-50 text-red-600 hover:bg-red-100">Révoquer</button>
+              <div key={inv.email} className="flex items-center justify-between flex-wrap gap-2 p-2.5 rounded-lg bg-sand-50 dark:bg-sand-900 text-sm">
+                <div className="min-w-0"><span className="font-medium text-sand-900 dark:text-sand-100 truncate">{inv.email}</span><span className="text-sand-400 dark:text-sand-500 ml-2">— {roleName(inv.role_code)}</span></div>
+                <div className="flex items-center gap-3 shrink-0">
+                  <span className="text-xs text-sand-400 dark:text-sand-500">Envoyée {timeAgo(inv.invited_at)}</span>
+                  {canCreate && <button onClick={() => handleRevoke(inv.email)} className="text-xs px-2.5 py-1 rounded-lg bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 hover:bg-red-100">Révoquer</button>}
                 </div>
               </div>
             ))}
@@ -146,19 +148,19 @@ export default function EmployeesPage() {
       <div className="card overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
-            <thead className="bg-sand-50 border-b border-sand-200">
+            <thead className="bg-sand-50 dark:bg-sand-900/50 border-b border-sand-200 dark:border-sand-700">
               <tr>
-                <th className="text-left px-4 py-3 font-medium text-sand-600">Employé</th>
-                <th className="text-left px-4 py-3 font-medium text-sand-600 hidden md:table-cell">Rôle</th>
-                <th className="text-center px-4 py-3 font-medium text-sand-600">Statut</th>
-                <th className="text-right px-4 py-3 font-medium text-sand-600"></th>
+                <th className="text-left px-4 py-3 font-medium text-sand-600 dark:text-sand-300">Employé</th>
+                <th className="text-left px-4 py-3 font-medium text-sand-600 dark:text-sand-300 hidden md:table-cell">Rôle</th>
+                <th className="text-center px-4 py-3 font-medium text-sand-600 dark:text-sand-300">Statut</th>
+                <th className="text-right px-4 py-3 font-medium text-sand-600 dark:text-sand-300"></th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-sand-100">
+            <tbody className="divide-y divide-sand-100 dark:divide-sand-700">
               {filteredEmployees.map((emp) => (
-                <tr key={emp.id} className="hover:bg-sand-50 transition-colors cursor-pointer" onClick={() => setSelected(emp)}>
+                <tr key={emp.id} className="hover:bg-sand-50 dark:hover:bg-sand-700 transition-colors cursor-pointer" onClick={() => setSelected(emp)}>
                   <td className="px-4 py-3">
-                    <div className="font-medium text-sand-900">{emp.full_name || emp.email}</div>
+                    <div className="font-medium text-sand-900 dark:text-sand-100">{emp.full_name || emp.email}</div>
                     <div className="text-xs text-sand-400">{emp.email}</div>
                   </td>
                   <td className="px-4 py-3 hidden md:table-cell text-sand-700">{emp.role_name ?? '—'}</td>
@@ -215,13 +217,13 @@ function InviteModal({ roles, onClose, onInvited }: { roles: Role[]; onClose: ()
 
   return (
     <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4 animate-fade-in" onClick={onClose}>
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md animate-slide-up" onClick={(e) => e.stopPropagation()}>
-        <div className="flex items-center justify-between p-5 border-b border-sand-200">
+      <div className="bg-white dark:bg-sand-800 rounded-2xl shadow-2xl w-full max-w-md animate-slide-up" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center justify-between p-5 border-b border-sand-200 dark:border-sand-700">
           <h2 className="font-display text-lg font-bold text-sand-900 flex items-center gap-2"><UserPlus className="w-5 h-5 text-ocre-600" /> Inviter un employé</h2>
-          <button onClick={onClose} className="w-8 h-8 rounded-lg hover:bg-sand-100 flex items-center justify-center"><X className="w-5 h-5" /></button>
+          <button onClick={onClose} className="w-8 h-8 rounded-lg hover:bg-sand-100 dark:hover:bg-sand-700 flex items-center justify-center"><X className="w-5 h-5" /></button>
         </div>
         <div className="p-5 space-y-4">
-          <p className="text-sm text-sand-500">La personne devra créer son compte avec cette adresse e-mail depuis la page de connexion : le rôle lui sera attribué automatiquement.</p>
+          <p className="text-sm text-sand-500 dark:text-sand-400">La personne devra créer son compte avec cette adresse e-mail depuis la page de connexion : le rôle lui sera attribué automatiquement.</p>
           <div><label className="label">Adresse e-mail</label><input type="email" className="input" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="employe@cmgs.ml" /></div>
           <div>
             <label className="label">Rôle</label>
@@ -229,7 +231,7 @@ function InviteModal({ roles, onClose, onInvited }: { roles: Role[]; onClose: ()
               {roles.map((r) => <option key={r.code} value={r.code}>{r.name}</option>)}
             </select>
           </div>
-          {error && <p className="rounded-lg bg-red-50 p-3 text-sm text-red-700">{error}</p>}
+          {error && <p className="rounded-lg bg-red-50 dark:bg-red-900/20 p-3 text-sm text-red-700 dark:text-red-400">{error}</p>}
           <button disabled={sending || !email} onClick={submit} className="btn-primary w-full">{sending ? 'Envoi...' : "Envoyer l'invitation"}</button>
         </div>
       </div>
@@ -244,7 +246,10 @@ function EmployeeDetail({
 }) {
   const { confirmAction } = useConfirm();
   const toast = useToast();
-  const canManagePermissions = usePermissions().has('employees.permissions');
+  const { has } = usePermissions();
+  const canManagePermissions = has('employees.permissions');
+  const canDeleteAccount = has('employees.delete');
+  const canDisable = has('employees.disable');
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -320,6 +325,21 @@ function EmployeeDetail({
     }
   };
 
+  const handleDeleteAccount = () => {
+    confirmAction({
+      title: 'Supprimer définitivement ce compte ?',
+      message: `Le compte de connexion de ${employee.full_name || employee.email} sera supprimé. Cette action est irréversible : contrairement à la désactivation, le compte ne pourra pas être restauré.`,
+      danger: true,
+      confirmLabel: 'Supprimer définitivement',
+      successMessage: 'Compte supprimé définitivement.',
+      onConfirm: async () => {
+        await deleteEmployeeAccount(employee.id);
+        onChanged();
+        onClose();
+      },
+    });
+  };
+
   const cyclePermission = (code: string, name: string) => {
     const current = overrideFor(code);
 
@@ -358,20 +378,20 @@ function EmployeeDetail({
 
   return (
     <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4 animate-fade-in" onClick={onClose}>
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto animate-slide-up" onClick={(e) => e.stopPropagation()}>
-        <div className="flex items-center justify-between p-5 border-b border-sand-200 sticky top-0 bg-white z-10">
+      <div className="bg-white dark:bg-sand-800 rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto animate-slide-up" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center justify-between p-5 border-b border-sand-200 dark:border-sand-700 sticky top-0 bg-white dark:bg-sand-800 z-10">
           <div className="flex items-center gap-3">
             <div className="w-12 h-12 rounded-full bg-gradient-to-br from-indigo-500 to-indigo-700 flex items-center justify-center text-white font-bold">{(employee.full_name || employee.email).charAt(0).toUpperCase()}</div>
             <div>
-              <h2 className="font-display text-lg font-bold text-sand-900">{employee.full_name || employee.email}</h2>
+              <h2 className="font-display text-lg font-bold text-sand-900 dark:text-sand-50">{employee.full_name || employee.email}</h2>
               <div className="text-xs text-sand-400 flex items-center gap-1"><Mail className="w-3 h-3" /> {employee.email}</div>
             </div>
           </div>
-          <button onClick={onClose} className="w-8 h-8 rounded-lg hover:bg-sand-100 flex items-center justify-center"><X className="w-5 h-5" /></button>
+          <button onClick={onClose} className="w-8 h-8 rounded-lg hover:bg-sand-100 dark:hover:bg-sand-700 flex items-center justify-center"><X className="w-5 h-5" /></button>
         </div>
 
         <div className="p-5 space-y-5">
-          {error && <p className="rounded-lg bg-red-50 p-3 text-sm text-red-700">{error}</p>}
+          {error && <p className="rounded-lg bg-red-50 dark:bg-red-900/20 p-3 text-sm text-red-700 dark:text-red-400">{error}</p>}
           {notice && <p className="rounded-lg bg-green-50 p-3 text-sm text-green-700">{notice}</p>}
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -383,15 +403,21 @@ function EmployeeDetail({
             </div>
             <div>
               <label className="label">Statut du compte</label>
-              <button onClick={() => toggleActive()} disabled={busy === 'active'} className={`w-full flex items-center justify-center gap-2 px-3 py-2.5 rounded-lg text-sm font-medium border ${employee.is_active ? 'border-red-200 text-red-600 hover:bg-red-50' : 'border-green-200 text-green-700 hover:bg-green-50'}`}>
+              <button onClick={() => toggleActive()} disabled={busy === 'active' || !canDisable} className={`w-full flex items-center justify-center gap-2 px-3 py-2.5 rounded-lg text-sm font-medium border ${employee.is_active ? 'border-red-200 dark:border-red-800 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/30' : 'border-green-200 dark:border-green-800 text-green-700 dark:text-green-400 hover:bg-green-50 dark:hover:bg-green-900/30'}`}>
                 <Power className="w-4 h-4" /> {employee.is_active ? 'Désactiver le compte' : 'Réactiver le compte'}
               </button>
             </div>
           </div>
 
-          <button onClick={() => void sendReset()} disabled={busy === 'reset'} className="w-full flex items-center justify-center gap-2 px-3 py-2.5 rounded-lg text-sm font-medium border border-sand-200 text-sand-700 hover:bg-sand-50">
+          <button onClick={() => void sendReset()} disabled={busy === 'reset'} className="w-full flex items-center justify-center gap-2 px-3 py-2.5 rounded-lg text-sm font-medium border border-sand-200 text-sand-700 hover:bg-sand-50 dark:hover:bg-sand-700">
             <KeyRound className="w-4 h-4" /> Envoyer un lien de réinitialisation de mot de passe
           </button>
+
+          {canDeleteAccount && (
+            <button onClick={handleDeleteAccount} className="w-full flex items-center justify-center gap-2 px-3 py-2.5 rounded-lg text-sm font-medium border border-red-200 dark:border-red-800 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/30">
+              <Trash2 className="w-4 h-4" /> Supprimer définitivement ce compte
+            </button>
+          )}
 
           <div>
             <h3 className="font-semibold text-sand-900 mb-2 text-sm flex items-center gap-2"><ShieldCheck className="w-4 h-4" /> Permissions individuelles</h3>
@@ -409,7 +435,7 @@ function EmployeeDetail({
                     key={perm.code}
                     onClick={() => cyclePermission(perm.code, perm.name)}
                     disabled={busy === `perm-${perm.code}` || !canManagePermissions}
-                    className="flex items-center justify-between gap-2 p-2 rounded-lg border border-sand-200 hover:enabled:bg-sand-50 text-left disabled:opacity-60 disabled:cursor-not-allowed"
+                    className="flex items-center justify-between gap-2 p-2 rounded-lg border border-sand-200 hover:enabled:bg-sand-50 dark:hover:enabled:bg-sand-700 text-left disabled:opacity-60 disabled:cursor-not-allowed"
                   >
                     <span className="text-xs text-sand-800 truncate">{perm.name}</span>
                     <span className={`badge shrink-0 ${color}`}>{label}</span>

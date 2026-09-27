@@ -34,7 +34,7 @@ export default function SettingsPage() {
     try {
       setRows(await getAllSettings());
     } catch {
-      setLoadError("Impossible de charger les paramètres. Vérifiez que vous disposez de la permission « settings.manage ».");
+      setLoadError("Impossible de charger les paramètres — vous n'avez pas l'autorisation nécessaire pour cette section.");
     } finally {
       setLoading(false);
     }
@@ -65,10 +65,10 @@ export default function SettingsPage() {
 
   if (loadError) {
     return (
-      <div className="p-6">
-        <div className="card p-5 flex items-start gap-3 bg-red-50 border-red-200">
-          <AlertCircle className="w-5 h-5 text-red-600 shrink-0 mt-0.5" />
-          <p className="text-sm text-red-700">{loadError}</p>
+      <div className="p-6 space-y-4 animate-fade-in">
+        <div className="card p-5 flex items-start gap-3 bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800">
+          <AlertCircle className="w-5 h-5 text-red-600 dark:text-red-400 shrink-0 mt-0.5" />
+          <p className="text-sm text-red-700 dark:text-red-400">{loadError}</p>
         </div>
       </div>
     );
@@ -78,21 +78,21 @@ export default function SettingsPage() {
   const categoryOrder = ['commerce', 'payments', 'chatbot', 'customers', 'service_client'];
 
   return (
-    <div className="p-6 space-y-6 animate-fade-in max-w-3xl">
+    <div className="p-6 space-y-6 animate-fade-in max-w-5xl mx-auto">
       <div>
-        <h2 className="font-display text-xl font-bold text-sand-900">Paramètres</h2>
-        <p className="text-sm text-sand-500">Configuration de la plateforme — chaque modification est journalisée.</p>
+        <h2 className="font-display text-xl font-bold text-sand-900 dark:text-sand-100">Paramètres</h2>
+        <p className="text-sm text-sand-500 dark:text-sand-400">Configuration de la plateforme — chaque modification est journalisée.</p>
       </div>
 
-      {saveError && <div className="card p-4 bg-red-50 border-red-200 text-sm text-red-700">{saveError}</div>}
+      {saveError && <div className="card p-4 bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800 text-sm text-red-700 dark:text-red-400">{saveError}</div>}
 
       {categoryOrder.filter((c) => grouped[c]?.length).map((category) => {
         const meta = CATEGORY_META[category] ?? { label: category, icon: Store };
         const Icon = meta.icon;
         return (
           <div key={category} className="card p-5">
-            <h3 className="font-semibold text-sand-900 mb-4 flex items-center gap-2"><Icon className="w-5 h-5 text-ocre-600" /> {meta.label}</h3>
-            <div className="space-y-3">
+            <h3 className="font-semibold text-sand-900 dark:text-sand-100 mb-4 flex items-center gap-2"><Icon className="w-5 h-5 text-ocre-600" /> {meta.label}</h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-4">
               {grouped[category].map((row) => (
                 <SettingField
                   key={row.key}
@@ -115,12 +115,12 @@ function SettingField({ row, saving, saved, onSave }: { row: SettingRow; saving:
 
   if (isAutoOrangeMoney) {
     return (
-      <label className="flex items-center gap-3 p-3 rounded-lg border border-sand-200 opacity-70 cursor-not-allowed">
+      <label className="flex items-center gap-3 p-3 rounded-lg border border-sand-200 dark:border-sand-700 opacity-70 cursor-not-allowed">
         <input type="checkbox" checked={false} disabled className="accent-ocre-600" />
-        <Lock className="w-4 h-4 text-sand-400 shrink-0" />
+        <Lock className="w-4 h-4 text-sand-400 dark:text-sand-500 shrink-0" />
         <div>
-          <div className="text-sm font-medium text-sand-900">Orange Money (automatique)</div>
-          <div className="text-xs text-sand-500">Indisponible tant que l'API réelle n'est pas intégrée — ne peut pas être activé depuis cette page.</div>
+          <div className="text-sm font-medium text-sand-900 dark:text-sand-100">Orange Money (automatique)</div>
+          <div className="text-xs text-sand-500 dark:text-sand-400">Indisponible tant que l'API réelle n'est pas intégrée — ne peut pas être activé depuis cette page.</div>
         </div>
       </label>
     );
@@ -128,7 +128,7 @@ function SettingField({ row, saving, saved, onSave }: { row: SettingRow; saving:
 
   if (typeof row.value === 'boolean') {
     return (
-      <label className="flex items-center gap-3 p-3 rounded-lg border border-sand-200">
+      <label className="flex items-center gap-3 p-3 rounded-lg border border-sand-200 dark:border-sand-700">
         <input
           type="checkbox"
           checked={row.value}
@@ -137,7 +137,7 @@ function SettingField({ row, saving, saved, onSave }: { row: SettingRow; saving:
           className="accent-ocre-600"
         />
         <div className="flex-1">
-          <div className="text-sm font-medium text-sand-900">{row.description ?? row.key}</div>
+          <div className="text-sm font-medium text-sand-900 dark:text-sand-100">{row.description ?? row.key}</div>
         </div>
         {saved && <span className="text-xs text-green-600 shrink-0">Enregistré</span>}
       </label>

@@ -68,13 +68,23 @@ export default function App() {
     setNavOpen(false);
   }, []);
 
+  // Correction §15 : jusqu'ici, après une connexion réussie, rien ne faisait
+  // quitter l'écran de connexion — l'utilisateur restait affiché sur le
+  // formulaire malgré une session valide. On attend que accountType soit
+  // résolu (pas seulement session) pour rediriger vers le bon espace.
+  useEffect(() => {
+    if (view === 'auth' && session && accountType) {
+      navigate(accountType === 'CUSTOMER' ? 'account' : 'dashboard');
+    }
+  }, [view, session, accountType, navigate]);
+
   const handleDashboardLogout = useCallback(async () => {
     await supabase.auth.signOut();
     navigate('auth');
   }, [navigate]);
 
   return (
-    <div className="min-h-screen bg-sand-50">
+    <div className="min-h-screen bg-sand-50 dark:bg-sand-900">
       {/* Compact floating menu: quick access to store / language / dashboard-account-deliveries */}
       <div className="fixed bottom-6 right-6 z-50 flex flex-col items-end gap-2">
         {navOpen && (

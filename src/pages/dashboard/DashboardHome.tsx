@@ -29,8 +29,8 @@ export default function DashboardHome({ onNavigate }: { onNavigate: (id: string)
   useEffect(() => {
     (async () => {
       const [{ data: o }, { data: p }, { data: c }, { data: n }, { data: pay }, { data: del }, { data: ret }, { data: conv }] = await Promise.all([
-        supabase.from('orders').select('*').order('created_at', { ascending: false }),
-        supabase.from('products').select('*'),
+        supabase.from('orders').select('*').is('deleted_at', null).order('created_at', { ascending: false }),
+        supabase.from('products').select('*').is('deleted_at', null),
         supabase.from('customers').select('*'),
         supabase.from('notifications').select('*').eq('read', false).order('created_at', { ascending: false }).limit(10),
         supabase.from('payments').select('*'),
@@ -60,11 +60,11 @@ export default function DashboardHome({ onNavigate }: { onNavigate: (id: string)
       setPendingCount(pending.length);
 
       // Low stock
-      setLowStockProducts(allProducts.filter((p) => p.stock_verified > 0 && p.stock_verified <= (p.low_stock_threshold ?? 5)).sort((a, b) => a.stock_verified - b.stock_verified));
+      setLowStockProducts(allProducts.filter((p) => p.stock > 0 && p.stock <= (p.low_stock_threshold ?? 5)).sort((a, b) => a.stock - b.stock));
 
       // Margin & commission
-      const { data: items } = await supabase.from('order_items').select('*, orders!inner(status)').eq('orders.status', 'DELIVERED');
-      const allItems = (items as (OrderItem & { orders: { status: string } })[]) ?? [];
+      const { data: items } = await supabase.from('order_items').select('*, orders!inner(status, deleted_at)').eq('orders.status', 'DELIVERED').is('orders.deleted_at', null);
+      const allItems = (items as (OrderItem & { orders: { status: string; deleted_at: string | null } })[]) ?? [];
       const summary = calculateSummary(allItems.map((i) => ({ quantity: i.quantity, salePrice: i.unit_price, purchasePrice: i.supplier_price })));
       setMargin(summary.grossMargin);
       setCommission(summary.supplierCommission);
@@ -114,8 +114,8 @@ export default function DashboardHome({ onNavigate }: { onNavigate: (id: string)
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Sales chart */}
         <div className="lg:col-span-2 card p-5">
-          <h3 className="font-semibold text-sand-900 mb-1">Ventes des 7 derniers jours</h3>
-          <p className="text-xs text-sand-500 mb-4">Montant total des commandes par jour (hors annulées)</p>
+          <h3 className="font-semibold text-sand-900 dark:text-sand-100 mb-1">Ventes des 7 derniers jours</h3>
+          <p className="text-xs text-sand-500 dark:text-sand-400 mb-4">Montant total des commandes par jour (hors annulées)</p>
           <div className="flex items-end justify-between gap-2 h-48">
             {dailySales.map((d) => {
               const heightPct = (d.total / maxSale) * 100;
@@ -127,7 +127,7 @@ export default function DashboardHome({ onNavigate }: { onNavigate: (id: string)
                       <div className="absolute -top-7 left-1/2 -translate-x-1/2 opacity-0 group-hover:opacity-100 transition-opacity bg-sand-900 text-white text-xs px-2 py-1 rounded whitespace-nowrap pointer-events-none">{formatFCFA(d.total)}</div>
                     </div>
                   </div>
-                  <span className="text-xs text-sand-500 capitalize">{dayLabel}</span>
+                  <span className="text-xs text-sand-500 dark:text-sand-400 capitalize">{dayLabel}</span>
                 </div>
               );
             })}
@@ -137,18 +137,18 @@ export default function DashboardHome({ onNavigate }: { onNavigate: (id: string)
         {/* Notifications */}
         <div className="card p-5">
           <div className="flex items-center justify-between mb-4">
-            <h3 className="font-semibold text-sand-900 flex items-center gap-2"><Bell className="w-4 h-4 text-ocre-600" /> Notifications</h3>
+            <h3 className="font-semibold text-sand-900 dark:text-sand-100 flex items-center gap-2"><Bell className="w-4 h-4 text-ocre-600" /> Notifications</h3>
             <button onClick={() => onNavigate('notifications')} className="text-xs text-ocre-600 hover:text-ocre-700">Voir tout</button>
           </div>
           <div className="space-y-2 max-h-56 overflow-y-auto">
             {notifications.length === 0 ? <p className="text-sm text-sand-400 text-center py-4">Aucune notification</p> : notifications.map((n) => (
-              <div key={n.id} className="p-3 rounded-lg bg-sand-50 border border-sand-200/60 hover:bg-sand-100 transition-colors cursor-pointer">
+              <div key={n.id} className="p-3 rounded-lg bg-sand-50 dark:bg-sand-800 border border-sand-200/60 hover:bg-sand-100 transition-colors cursor-pointer">
                 <div className="flex items-start gap-2">
                   <div className="w-2 h-2 rounded-full bg-ocre-500 mt-1.5 shrink-0" />
                   <div className="min-w-0">
-                    <div className="text-sm font-medium text-sand-900">{n.title}</div>
-                    <div className="text-xs text-sand-500">{n.message}</div>
-                    <div className="text-[10px] text-sand-400 mt-1">{timeAgo(n.created_at)}</div>
+                    <div className="text-sm font-medium text-sand-900 dark:text-sand-100">{n.title}</div>
+                    <div className="text-xs text-sand-500 dark:text-sand-400">{n.message}</div>
+                    <div className="text-[10px] text-sand-400 dark:text-sand-500 mt-1">{timeAgo(n.created_at)}</div>
                   </div>
                 </div>
               </div>
@@ -161,19 +161,19 @@ export default function DashboardHome({ onNavigate }: { onNavigate: (id: string)
         {/* Recent orders */}
         <div className="card p-5">
           <div className="flex items-center justify-between mb-4">
-            <h3 className="font-semibold text-sand-900">Commandes récentes</h3>
+            <h3 className="font-semibold text-sand-900 dark:text-sand-100">Commandes récentes</h3>
             <button onClick={() => onNavigate('orders')} className="text-xs text-ocre-600 hover:text-ocre-700">Voir tout</button>
           </div>
           <div className="space-y-2">
             {orders.slice(0, 6).map((o) => (
-              <div key={o.id} className="flex items-center justify-between p-3 rounded-lg hover:bg-sand-50 transition-colors">
+              <div key={o.id} className="flex items-center justify-between p-3 rounded-lg hover:bg-sand-50 dark:hover:bg-sand-700 transition-colors">
                 <div className="min-w-0">
-                  <div className="font-mono text-sm font-medium text-sand-900">{o.code}</div>
-                  <div className="text-xs text-sand-500">{formatDateTime(o.created_at)}</div>
+                  <div className="font-mono text-sm font-medium text-sand-900 dark:text-sand-100">{o.code}</div>
+                  <div className="text-xs text-sand-500 dark:text-sand-400">{formatDateTime(o.created_at)}</div>
                 </div>
                 <div className="flex items-center gap-3 shrink-0">
                   <span className={`badge ${ORDER_STATUS_COLORS[o.status] ?? ''}`}>{ORDER_STATUS_LABELS[o.status] ?? o.status}</span>
-                  <span className="font-bold text-sm text-sand-900">{formatFCFA(o.total)}</span>
+                  <span className="font-bold text-sm text-sand-900 dark:text-sand-100">{formatFCFA(o.total)}</span>
                 </div>
               </div>
             ))}
@@ -182,18 +182,18 @@ export default function DashboardHome({ onNavigate }: { onNavigate: (id: string)
 
         {/* Top products */}
         <div className="card p-5">
-          <h3 className="font-semibold text-sand-900 mb-4">Produits les plus vendus</h3>
+          <h3 className="font-semibold text-sand-900 dark:text-sand-100 mb-4">Produits les plus vendus</h3>
           <div className="space-y-2">
-            {topProducts.length === 0 ? <p className="text-sm text-sand-400 text-center py-4">Aucune vente enregistrée</p> : topProducts.map((p, i) => (
-              <div key={p.code} className="flex items-center gap-3 p-3 rounded-lg hover:bg-sand-50 transition-colors">
-                <span className="w-6 h-6 rounded-full bg-ocre-100 text-ocre-700 text-xs font-bold flex items-center justify-center shrink-0">{i + 1}</span>
+            {topProducts.length === 0 ? <p className="text-sm text-sand-400 dark:text-sand-500 text-center py-4">Aucune vente enregistrée</p> : topProducts.map((p, i) => (
+              <div key={p.code} className="flex items-center gap-3 p-3 rounded-lg hover:bg-sand-50 dark:hover:bg-sand-700 transition-colors">
+                <span className="w-6 h-6 rounded-full bg-ocre-100 dark:bg-ocre-900/40 text-ocre-700 dark:text-ocre-300 text-xs font-bold flex items-center justify-center shrink-0">{i + 1}</span>
                 <div className="flex-1 min-w-0">
-                  <div className="font-medium text-sm text-sand-900 truncate">{p.name}</div>
-                  <div className="font-mono text-xs text-sand-400">{p.code}</div>
+                  <div className="font-medium text-sm text-sand-900 dark:text-sand-100 truncate">{p.name}</div>
+                  <div className="font-mono text-xs text-sand-400 dark:text-sand-500">{p.code}</div>
                 </div>
                 <div className="text-right shrink-0">
-                  <div className="text-sm font-bold text-sand-900">{p.qty} vendus</div>
-                  <div className="text-xs text-sand-500">{formatFCFA(p.revenue)}</div>
+                  <div className="text-sm font-bold text-sand-900 dark:text-sand-100">{p.qty} vendus</div>
+                  <div className="text-xs text-sand-500 dark:text-sand-400">{formatFCFA(p.revenue)}</div>
                 </div>
               </div>
             ))}
@@ -218,17 +218,17 @@ export default function DashboardHome({ onNavigate }: { onNavigate: (id: string)
       {/* Alertes */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <div className="card p-5">
-          <h3 className="font-semibold text-sand-900 flex items-center gap-2 mb-4"><AlertTriangle className="w-4 h-4 text-ocre-600" /> Stock faible</h3>
-          {lowStockProducts.length === 0 ? <p className="text-sm text-sand-400">Tous les stocks sont à un bon niveau.</p> : (
+          <h3 className="font-semibold text-sand-900 dark:text-sand-100 flex items-center gap-2 mb-4"><AlertTriangle className="w-4 h-4 text-ocre-600" /> Stock faible</h3>
+          {lowStockProducts.length === 0 ? <p className="text-sm text-sand-400 dark:text-sand-500">Tous les stocks sont à un bon niveau.</p> : (
             <div className="space-y-2">
               {lowStockProducts.map((p) => (
-                <div key={p.id} className="flex items-center justify-between p-3 rounded-lg bg-ocre-50 border border-ocre-100">
+                <div key={p.id} className="flex items-center justify-between p-3 rounded-lg bg-ocre-50 dark:bg-ocre-900/20 border border-ocre-100 dark:border-ocre-800">
                   <div className="flex items-center gap-2">
                     <Package className="w-4 h-4 text-ocre-600" />
-                    <span className="font-mono text-xs text-sand-500">{p.code}</span>
-                    <span className="text-sm font-medium text-sand-900">{p.name}</span>
+                    <span className="font-mono text-xs text-sand-500 dark:text-sand-400">{p.code}</span>
+                    <span className="text-sm font-medium text-sand-900 dark:text-sand-100">{p.name}</span>
                   </div>
-                  <span className="badge bg-ocre-200 text-ocre-800">{p.stock_verified} restant</span>
+                  <span className="badge bg-ocre-200 dark:bg-ocre-800 text-ocre-800 dark:text-ocre-200">{p.stock} restant</span>
                 </div>
               ))}
             </div>
@@ -236,7 +236,7 @@ export default function DashboardHome({ onNavigate }: { onNavigate: (id: string)
         </div>
 
         <div className="card p-5">
-          <h3 className="font-semibold text-sand-900 flex items-center gap-2 mb-4"><Truck className="w-4 h-4 text-indigo-600" /> Statut rapide</h3>
+          <h3 className="font-semibold text-sand-900 dark:text-sand-100 flex items-center gap-2 mb-4"><Truck className="w-4 h-4 text-indigo-600" /> Statut rapide</h3>
           <div className="grid grid-cols-2 gap-3">
             <StatBox label="Commandes en cours" value={pendingCount} color="ocre" />
             <StatBox label="Commandes livrées" value={deliveredCount} color="green" />
@@ -250,11 +250,11 @@ export default function DashboardHome({ onNavigate }: { onNavigate: (id: string)
 }
 
 const colorMap: Record<string, string> = {
-  ocre: 'bg-ocre-100 text-ocre-700',
-  green: 'bg-green-100 text-green-700',
-  indigo: 'bg-indigo-100 text-indigo-700',
-  blue: 'bg-blue-100 text-blue-700',
-  red: 'bg-red-100 text-red-700',
+  ocre: 'bg-ocre-100 dark:bg-ocre-900/40 text-ocre-700 dark:text-ocre-300',
+  green: 'bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-300',
+  indigo: 'bg-indigo-100 dark:bg-indigo-900/40 text-indigo-700 dark:text-indigo-300',
+  blue: 'bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300',
+  red: 'bg-red-100 dark:bg-red-900/40 text-red-700 dark:text-red-300',
 };
 
 function KpiCard({ icon: Icon, label, value, sub, color }: { icon: LucideIcon; label: string; value: string; sub?: string; color: string }) {
@@ -263,9 +263,9 @@ function KpiCard({ icon: Icon, label, value, sub, color }: { icon: LucideIcon; l
       <div className="flex items-center justify-between mb-3">
         <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${colorMap[color]}`}><Icon className="w-5 h-5" /></div>
       </div>
-      <div className="font-display text-2xl font-bold text-sand-900">{value}</div>
-      <div className="text-sm text-sand-500 mt-1">{label}</div>
-      {sub && <div className="text-xs text-sand-400 mt-0.5">{sub}</div>}
+      <div className="font-display text-2xl sm:text-[28px] font-bold text-sand-900 dark:text-sand-100 tracking-tight">{value}</div>
+      <div className="text-sm text-sand-500 dark:text-sand-400 mt-1">{label}</div>
+      {sub && <div className="text-xs text-sand-400 dark:text-sand-500 mt-0.5">{sub}</div>}
     </div>
   );
 }
@@ -285,7 +285,7 @@ function MiniStat({ icon: Icon, label, value, onClick, color }: { icon: LucideIc
       <div className="flex items-center justify-between mb-2">
         <div className={`w-9 h-9 rounded-lg flex items-center justify-center ${colorMap[color]}`}><Icon className="w-4 h-4" /></div>
       </div>
-      <div className="font-display text-xl font-bold text-sand-900">{value}</div>
+      <div className="font-display text-xl font-bold text-sand-900 dark:text-sand-100">{value}</div>
       <div className="text-xs text-sand-500 mt-0.5">{label}</div>
     </button>
   );

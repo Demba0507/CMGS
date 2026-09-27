@@ -1,20 +1,22 @@
 import { useState, useEffect } from 'react';
-import { ChevronRight, X, Package, Truck, Search } from 'lucide-react';
+import { ChevronRight, X, Package, Truck, Search, Trash2, ArchiveRestore, ShieldAlert } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import type { Order, OrderItem, Customer, Supplier, OrderSupplierGroup } from '@/lib/types';
 import { formatFCFA, formatDateTime } from '@/lib/format';
 import { ORDER_STATUS_LABELS, ORDER_STATUS_COLORS, ORDER_STATUS_FLOW, PAYMENT_METHOD_LABELS, PAYMENT_STATUS_LABELS, PAYMENT_STATUS_COLORS, CHANNEL_LABELS, SUBORDER_STATUS_LABELS, SUBORDER_STATUS_COLORS, SUBORDER_STATUS_FLOW } from '@/lib/constants';
 import { updateSuborderStatus } from '@/lib/suborders';
-import { logAuditEvent } from '@/lib/audit';
+import { cancelOrder, updateOrderStatus, deleteOrder, restoreOrder, purgeOrder } from '@/lib/orderActions';
 import { useToast } from '@/lib/toast';
+import { useConfirm } from '@/lib/confirm';
+import { usePermissions } from '@/lib/permissions';
 import ExportButtons from '@/components/ExportButtons';
 import type { ExportColumn } from '@/lib/export';
 
 function orderExportColumns(customers: Customer[]): ExportColumn<Order>[] {
   return [
     { label: 'Code', value: (o) => o.code },
-    { label: 'Client', value: (o) => customers.find((c) => c.id === o.customer_id)?.name ?? '—' },
-    { label: 'Téléphone', value: (o) => customers.find((c) => c.id === o.customer_id)?.phone ?? '—' },
+    { label: 'Client', value: (o) => customers.find((c) => c.id === o.customer_id)?.name ?? o.customer_name ?? '—' },
+    { label: 'Téléphone', value: (o) => customers.find((c) => c.id === o.customer_id)?.phone ?? o.customer_phone ?? '—' },
     { label: 'Canal', value: (o) => CHANNEL_LABELS[o.channel] ?? o.channel },
     { label: 'Statut', value: (o) => ORDER_STATUS_LABELS[o.status] ?? o.status },
     { label: 'Paiement', value: (o) => PAYMENT_METHOD_LABELS[o.payment_method] ?? o.payment_method },
@@ -25,30 +27,37 @@ function orderExportColumns(customers: Customer[]): ExportColumn<Order>[] {
   ];
 }
 
-import { cancelOrder } from '@/lib/orderActions';
-
 export default function OrdersPage() {
   const toast = useToast();
+  const { confirmAction } = useConfirm();
+  const { has } = usePermissions();
+  const canEdit = has('orders.edit');
+  const canCancel = has('orders.cancel');
+  const canDelete = has('orders.delete');
   const [orders, setOrders] = useState<Order[]>([]);
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [items, setItems] = useState<Record<string, OrderItem[]>>({});
   const [suborders, setSuborders] = useState<Record<string, OrderSupplierGroup[]>>({});
   const [loading, setLoading] = useState(true);
+  const [showTrash, setShowTrash] = useState(false);
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
   const [filterStatus, setFilterStatus] = useState<string>('');
   const [search, setSearch] = useState('');
   const [statusBusyId, setStatusBusyId] = useState<string | null>(null);
+  const [listLimit, setListLimit] = useState(200);
+  const [hasMore, setHasMore] = useState(false);
 
   const load = async () => {
     setLoading(true);
     const [{ data: o }, { data: c }, { data: allItems }, { data: s }, { data: allSuborders }] = await Promise.all([
-      supabase.from('orders').select('*').order('created_at', { ascending: false }),
+      supabase.from('orders').select('*').order('created_at', { ascending: false }).limit(listLimit),
       supabase.from('customers').select('*'),
       supabase.from('order_items').select('*'),
       supabase.from('suppliers').select('*'),
       supabase.from('order_supplier_groups').select('*'),
     ]);
+    setHasMore((o?.length ?? 0) === listLimit);
     const allOrders = (o as Order[]) ?? [];
     setOrders(allOrders);
     setCustomers((c as Customer[]) ?? []);
@@ -68,66 +77,128 @@ export default function OrdersPage() {
     setLoading(false);
   };
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => { void load(); }, [listLimit]);
 
   const filtered = orders.filter((o) => {
-    if (filterStatus && o.status !== filterStatus) return false;
+    if (showTrash ? !o.deleted_at : !!o.deleted_at) return false;
+    if (!showTrash && filterStatus && o.status !== filterStatus) return false;
     if (search) {
       const cust = customers.find((c) => c.id === o.customer_id);
-      const haystack = `${o.code} ${cust?.name ?? ''} ${cust?.phone ?? ''}`.toLowerCase();
+      const haystack = `${o.code} ${cust?.name ?? o.customer_name ?? ''} ${cust?.phone ?? o.customer_phone ?? ''}`.toLowerCase();
       if (!haystack.includes(search.toLowerCase())) return false;
     }
     return true;
   });
+  const trashCount = orders.filter((o) => !!o.deleted_at).length;
+
+  const handleDelete = (order: Order) => {
+    confirmAction({
+      title: 'Supprimer cette commande ?',
+      message: `La commande ${order.code} sera déplacée en corbeille et ne sera plus visible dans la liste active.${order.status !== 'CANCELLED' && order.status !== 'RETURNED' ? ' Le stock réservé sera libéré.' : ''} Elle pourra être restaurée si besoin.`,
+      danger: true,
+      confirmLabel: 'Supprimer',
+      successMessage: 'Commande déplacée en corbeille.',
+      onConfirm: async () => {
+        await deleteOrder(order.id);
+        if (selectedOrder?.id === order.id) setSelectedOrder(null);
+        await load();
+      },
+    });
+  };
+
+  const handleRestore = (order: Order) => {
+    confirmAction({
+      title: 'Restaurer cette commande ?',
+      message: `La commande ${order.code} redeviendra visible dans la liste active.`,
+      confirmLabel: 'Restaurer',
+      successMessage: 'Commande restaurée avec succès.',
+      onConfirm: async () => {
+        await restoreOrder(order.id);
+        await load();
+      },
+    });
+  };
+
+  const handlePurge = (order: Order) => {
+    confirmAction({
+      title: 'Supprimer définitivement cette commande ?',
+      message: `La commande ${order.code} sera effacée de façon permanente et ne pourra plus être restaurée. Cette action nécessite qu'une sauvegarde de moins d'1h existe (vérifié côté serveur).`,
+      confirmLabel: 'Supprimer définitivement',
+      danger: true,
+      successMessage: 'Commande supprimée définitivement.',
+      onConfirm: async () => {
+        await purgeOrder(order.id);
+        if (selectedOrder?.id === order.id) setSelectedOrder(null);
+        await load();
+      },
+    });
+  };
 
   const updateStatus = async (order: Order, newStatus: string) => {
     if (statusBusyId) return;
-    setStatusBusyId(order.id);
+    if (newStatus === 'CANCELLED' ? !canCancel : !canEdit) {
+      toast.error('Permission refusée : vous ne pouvez pas modifier le statut de cette commande.');
+      return;
+    }
     if (newStatus === 'CANCELLED') {
-      const reason = prompt("Motif de l'annulation (facultatif) :") ?? undefined;
-      try {
-        await cancelOrder(order.id, reason);
-      } catch (err) {
-        const message = err instanceof Error ? err.message : "Impossible d'annuler cette commande.";
-        toast.error(message);
-        setStatusBusyId(null);
-        return;
-      }
-      await load();
-      toast.success(`Commande ${order.code} annulée.`);
-      setStatusBusyId(null);
-      if (selectedOrder?.id === order.id) setSelectedOrder(null);
+      confirmAction({
+        title: 'Annuler cette commande ?',
+        message: `La commande ${order.code} sera annulée et son stock restauré.`,
+        confirmLabel: 'Annuler la commande',
+        danger: true,
+        successMessage: `Commande ${order.code} annulée.`,
+        input: { label: "Motif de l'annulation", placeholder: 'Facultatif' },
+        onConfirm: async (reason) => {
+          setStatusBusyId(order.id);
+          try {
+            await cancelOrder(order.id, reason || undefined);
+            await load();
+            if (selectedOrder?.id === order.id) setSelectedOrder(null);
+          } finally {
+            setStatusBusyId(null);
+          }
+        },
+      });
       return;
     }
-    const { error } = await supabase.from('orders').update({ status: newStatus, updated_at: new Date().toISOString() }).eq('id', order.id);
-    if (error) {
-      toast.error('Une erreur est survenue. Veuillez réessayer.');
+    setStatusBusyId(order.id);
+    let updated: Order;
+    try {
+      updated = await updateOrderStatus(order.id, newStatus);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Une erreur est survenue. Veuillez réessayer.';
+      toast.error(message);
       setStatusBusyId(null);
       return;
-    }
-    await logAuditEvent('ORDER_STATUS_CHANGED', 'order', order.id, `Commande ${order.code} → ${ORDER_STATUS_LABELS[newStatus]}`, order.status, newStatus);
-    if (newStatus === 'DELIVERED') {
-      await supabase.from('payments').update({ status: 'VERIFIED', verified_at: new Date().toISOString() }).eq('order_id', order.id).eq('status', 'PENDING');
     }
     await load();
     toast.success(`Commande ${order.code} → ${ORDER_STATUS_LABELS[newStatus]}.`);
     setStatusBusyId(null);
     if (selectedOrder?.id === order.id) {
-      setSelectedOrder({ ...order, status: newStatus as Order['status'] });
+      setSelectedOrder({ ...order, status: updated.status });
     }
   };
 
   return (
     <div className="p-6 space-y-4 animate-fade-in">
       <div className="flex items-center justify-between flex-wrap gap-3">
-        <div><h2 className="font-display text-xl font-bold text-sand-900">{orders.length} commandes</h2><p className="text-sm text-sand-500">Gérez et suivez vos commandes</p></div>
+        <div><h2 className="font-display text-xl font-bold text-sand-900 dark:text-sand-100">{filtered.length} commandes</h2><p className="text-sm text-sand-500 dark:text-sand-400">Gérez et suivez vos commandes</p></div>
         <div className="flex items-center gap-2">
+          {!showTrash && (
           <ExportButtons
             filename="commandes-cmgs"
-            title="Commandes CMGS"
+            title="Commandes RATELAFRICA"
             columns={orderExportColumns(customers)}
             rows={filtered}
           />
+          )}
+          {canDelete && (
+            <button onClick={() => setShowTrash((v) => !v)} className={`text-xs px-3 py-1.5 rounded-lg font-medium flex items-center gap-1.5 ${showTrash ? 'bg-ocre-600 text-white' : 'bg-sand-100 text-sand-600 hover:bg-sand-200'}`}>
+              <Trash2 className="w-3.5 h-3.5" /> {showTrash ? 'Retour aux commandes' : `Corbeille${trashCount > 0 ? ` (${trashCount})` : ''}`}
+            </button>
+          )}
+          {!showTrash && (
+          <>
           <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-sand-400" />
             <input className="input pl-10 max-w-[220px]" placeholder="Code, client, téléphone..." value={search} onChange={(e) => setSearch(e.target.value)} />
@@ -136,6 +207,8 @@ export default function OrdersPage() {
             <option value="">Tous statuts</option>
             {Object.entries(ORDER_STATUS_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
           </select>
+          </>
+          )}
         </div>
       </div>
 
@@ -145,35 +218,50 @@ export default function OrdersPage() {
         <div className="card overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
-              <thead className="bg-sand-50 border-b border-sand-200">
+              <thead className="bg-sand-50 dark:bg-sand-900/50 border-b border-sand-200 dark:border-sand-700">
                 <tr>
-                  <th className="text-left px-4 py-3 font-medium text-sand-600">Commande</th>
-                  <th className="text-left px-4 py-3 font-medium text-sand-600 hidden md:table-cell">Client</th>
-                  <th className="text-left px-4 py-3 font-medium text-sand-600 hidden lg:table-cell">Canal</th>
-                  <th className="text-left px-4 py-3 font-medium text-sand-600 hidden lg:table-cell">Paiement</th>
-                  <th className="text-right px-4 py-3 font-medium text-sand-600">Total</th>
-                  <th className="text-center px-4 py-3 font-medium text-sand-600">Statut</th>
-                  <th className="text-right px-4 py-3 font-medium text-sand-600">Détail</th>
+                  <th className="text-left px-4 py-3 font-medium text-sand-600 dark:text-sand-300">Commande</th>
+                  <th className="text-left px-4 py-3 font-medium text-sand-600 dark:text-sand-300 hidden md:table-cell">Client</th>
+                  <th className="text-left px-4 py-3 font-medium text-sand-600 dark:text-sand-300 hidden lg:table-cell">Canal</th>
+                  <th className="text-left px-4 py-3 font-medium text-sand-600 dark:text-sand-300 hidden lg:table-cell">Paiement</th>
+                  <th className="text-right px-4 py-3 font-medium text-sand-600 dark:text-sand-300">Total</th>
+                  <th className="text-center px-4 py-3 font-medium text-sand-600 dark:text-sand-300">Statut</th>
+                  <th className="text-right px-4 py-3 font-medium text-sand-600 dark:text-sand-300">Détail</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-sand-100">
+              <tbody className="divide-y divide-sand-100 dark:divide-sand-700">
                 {filtered.map((o) => {
                   const cust = customers.find((c) => c.id === o.customer_id);
                   return (
-                    <tr key={o.id} className="hover:bg-sand-50 transition-colors cursor-pointer" onClick={() => setSelectedOrder(o)}>
-                      <td className="px-4 py-3"><div className="font-mono font-medium text-sand-900">{o.code}</div><div className="text-xs text-sand-400">{formatDateTime(o.created_at)}</div></td>
-                      <td className="px-4 py-3 hidden md:table-cell text-sand-700">{cust?.name ?? '—'}</td>
+                    <tr key={o.id} className="hover:bg-sand-50 dark:hover:bg-sand-700 transition-colors cursor-pointer" onClick={() => setSelectedOrder(o)}>
+                      <td className="px-4 py-3"><div className="font-mono font-medium text-sand-900 dark:text-sand-100">{o.code}</div><div className="text-xs text-sand-400">{formatDateTime(o.created_at)}</div></td>
+                      <td className="px-4 py-3 hidden md:table-cell text-sand-700">{cust?.name ?? o.customer_name ?? '—'}</td>
                       <td className="px-4 py-3 hidden lg:table-cell"><span className="badge bg-sand-100 text-sand-600">{CHANNEL_LABELS[o.channel] ?? o.channel}</span></td>
                       <td className="px-4 py-3 hidden lg:table-cell"><span className={`badge ${PAYMENT_STATUS_COLORS[o.payment_status]}`}>{PAYMENT_STATUS_LABELS[o.payment_status]}</span></td>
-                      <td className="px-4 py-3 text-right font-bold text-sand-900">{formatFCFA(o.total)}</td>
+                      <td className="px-4 py-3 text-right font-bold text-sand-900 dark:text-sand-100">{formatFCFA(o.total)}</td>
                       <td className="px-4 py-3 text-center"><span className={`badge ${ORDER_STATUS_COLORS[o.status]}`}>{ORDER_STATUS_LABELS[o.status]}</span></td>
-                      <td className="px-4 py-3 text-right"><ChevronRight className="w-4 h-4 text-sand-400 inline" /></td>
+                      <td className="px-4 py-3 text-right">
+                        {showTrash ? (
+                          <div className="flex items-center justify-end gap-1" onClick={(e) => e.stopPropagation()}>
+                            <button onClick={() => handleRestore(o)} className="w-8 h-8 rounded-lg hover:bg-green-50 flex items-center justify-center text-green-600" title="Restaurer"><ArchiveRestore className="w-4 h-4" /></button>
+                            <button onClick={() => handlePurge(o)} className="w-8 h-8 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/30 flex items-center justify-center text-red-500 dark:text-red-400" title="Supprimer définitivement"><ShieldAlert className="w-4 h-4" /></button>
+                          </div>
+                        ) : (
+                          <ChevronRight className="w-4 h-4 text-sand-400 inline" />
+                        )}
+                      </td>
                     </tr>
                   );
                 })}
               </tbody>
             </table>
           </div>
+        </div>
+      )}
+
+      {hasMore && !showTrash && (
+        <div className="flex justify-center">
+          <button onClick={() => setListLimit((l) => l + 200)} disabled={loading} className="btn-secondary text-sm">{loading ? 'Chargement...' : 'Charger plus de commandes'}</button>
         </div>
       )}
 
@@ -188,6 +276,10 @@ export default function OrdersPage() {
           onUpdateStatus={updateStatus}
           onReload={load}
           statusBusy={!!statusBusyId}
+          canEdit={canEdit}
+          canCancel={canCancel}
+          canDelete={canDelete}
+          onDelete={() => handleDelete(selectedOrder)}
         />
       )}
     </div>
@@ -195,12 +287,13 @@ export default function OrdersPage() {
 }
 
 function OrderDetail({
-  order, items, suborders, suppliers, customer, onClose, onUpdateStatus, onReload, statusBusy,
+  order, items, suborders, suppliers, customer, onClose, onUpdateStatus, onReload, statusBusy, canEdit, canCancel, canDelete, onDelete,
 }: {
   order: Order; items: OrderItem[]; suborders: OrderSupplierGroup[]; suppliers: Supplier[]; customer: Customer | null;
   onClose: () => void; onUpdateStatus: (o: Order, s: string) => void; onReload: () => void; statusBusy: boolean;
+  canEdit: boolean; canCancel: boolean; canDelete: boolean; onDelete: () => void;
 }) {
-  const nextStatuses = ORDER_STATUS_FLOW[order.status] ?? [];
+  const nextStatuses = (ORDER_STATUS_FLOW[order.status] ?? []).filter((s) => (s === 'CANCELLED' ? canCancel : canEdit));
   const itemsBySupplierGroup: Record<string, OrderItem[]> = {};
   for (const item of items) {
     const key = item.supplier_group_id ?? 'none';
@@ -208,10 +301,13 @@ function OrderDetail({
   }
   return (
     <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4 animate-fade-in" onClick={onClose}>
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto animate-slide-up" onClick={(e) => e.stopPropagation()}>
-        <div className="flex items-center justify-between p-5 border-b border-sand-200 sticky top-0 bg-white z-10">
-          <div><h2 className="font-display text-lg font-bold text-sand-900 font-mono">{order.code}</h2><p className="text-sm text-sand-500">{formatDateTime(order.created_at)}</p></div>
-          <button onClick={onClose} className="w-8 h-8 rounded-lg hover:bg-sand-100 flex items-center justify-center"><X className="w-5 h-5" /></button>
+      <div className="bg-white dark:bg-sand-800 rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto animate-slide-up" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center justify-between p-5 border-b border-sand-200 dark:border-sand-700 sticky top-0 bg-white dark:bg-sand-800 z-10">
+          <div><h2 className="font-display text-lg font-bold text-sand-900 font-mono">{order.code}</h2><p className="text-sm text-sand-500 dark:text-sand-400">{formatDateTime(order.created_at)}</p></div>
+          <div className="flex items-center gap-1">
+            {canDelete && <button onClick={onDelete} className="w-8 h-8 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/30 flex items-center justify-center text-red-500 dark:text-red-400" title="Supprimer"><Trash2 className="w-4 h-4" /></button>}
+            <button onClick={onClose} className="w-8 h-8 rounded-lg hover:bg-sand-100 dark:hover:bg-sand-700 flex items-center justify-center"><X className="w-5 h-5" /></button>
+          </div>
         </div>
         <div className="p-5 space-y-5">
           <div className="flex items-center gap-3 flex-wrap">
@@ -220,17 +316,15 @@ function OrderDetail({
             <span className="badge bg-sand-100 text-sand-600">{CHANNEL_LABELS[order.channel]}</span>
           </div>
 
-          {customer && (
-            <div className="card p-4">
-              <h3 className="font-semibold text-sand-900 mb-3 text-sm">Client</h3>
-              <div className="grid grid-cols-2 gap-3 text-sm">
-                <div><span className="text-sand-500">Nom</span><div className="font-medium text-sand-900">{customer.name}</div></div>
-                <div><span className="text-sand-500">Téléphone</span><div className="font-medium text-sand-900">{customer.phone ?? '—'}</div></div>
-                <div><span className="text-sand-500">Quartier</span><div className="font-medium text-sand-900">{order.delivery_neighborhood ?? customer.neighborhood ?? '—'}</div></div>
-                <div><span className="text-sand-500">Adresse</span><div className="font-medium text-sand-900">{order.delivery_address ?? customer.address ?? '—'}</div></div>
-              </div>
+          <div className="card p-4">
+            <h3 className="font-semibold text-sand-900 mb-3 text-sm">Client</h3>
+            <div className="grid grid-cols-2 gap-3 text-sm">
+              <div><span className="text-sand-500 dark:text-sand-400">Nom</span><div className="font-medium text-sand-900 dark:text-sand-100">{customer?.name ?? order.customer_name ?? '—'}{!customer && <span className="ml-1.5 text-xs text-sand-400 font-normal">(compte supprimé)</span>}</div></div>
+              <div><span className="text-sand-500 dark:text-sand-400">Téléphone</span><div className="font-medium text-sand-900 dark:text-sand-100">{customer?.phone ?? order.customer_phone ?? '—'}</div></div>
+              <div><span className="text-sand-500 dark:text-sand-400">Quartier</span><div className="font-medium text-sand-900 dark:text-sand-100">{order.delivery_neighborhood ?? customer?.neighborhood ?? '—'}</div></div>
+              <div><span className="text-sand-500 dark:text-sand-400">Adresse</span><div className="font-medium text-sand-900 dark:text-sand-100">{order.delivery_address ?? customer?.address ?? '—'}</div></div>
             </div>
-          )}
+          </div>
 
           {suborders.length > 1 && (
             <div className="space-y-3">
@@ -242,6 +336,7 @@ function OrderDetail({
                   supplierName={suppliers.find((s) => s.id === g.supplier_id)?.name ?? 'Fournisseur inconnu'}
                   items={itemsBySupplierGroup[g.id] ?? []}
                   onChanged={onReload}
+                  canEdit={canEdit}
                 />
               ))}
             </div>
@@ -260,11 +355,11 @@ function OrderDetail({
                 </div>
               ))}
             </div>
-            <div className="mt-4 pt-3 border-t border-sand-200 space-y-1 text-sm">
+            <div className="mt-4 pt-3 border-t border-sand-200 dark:border-sand-700 space-y-1 text-sm">
               <div className="flex justify-between text-sand-600"><span>Sous-total</span><span>{formatFCFA(order.subtotal)}</span></div>
               <div className="flex justify-between text-sand-600"><span>Livraison</span><span>{formatFCFA(order.delivery_fee)}</span></div>
               {order.service_fee > 0 && <div className="flex justify-between text-sand-600"><span>Frais de service</span><span>{formatFCFA(order.service_fee)}</span></div>}
-              <div className="flex justify-between font-bold text-sand-900 text-base pt-2 border-t border-sand-200"><span>Total</span><span>{formatFCFA(order.total)}</span></div>
+              <div className="flex justify-between font-bold text-sand-900 text-base pt-2 border-t border-sand-200 dark:border-sand-700"><span>Total</span><span>{formatFCFA(order.total)}</span></div>
             </div>
           </div>
 
@@ -273,7 +368,7 @@ function OrderDetail({
               <h3 className="font-semibold text-sand-900 mb-3 text-sm">Changer le statut</h3>
               <div className="flex flex-wrap gap-2">
                 {nextStatuses.map((s) => (
-                  <button key={s} onClick={() => onUpdateStatus(order, s)} disabled={statusBusy} className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors disabled:opacity-50 ${s === 'CANCELLED' || s === 'RETURNED' || s === 'REFUNDED' ? 'bg-red-100 text-red-700 hover:bg-red-200' : 'bg-ocre-600 text-white hover:bg-ocre-700'}`}>
+                  <button key={s} onClick={() => onUpdateStatus(order, s)} disabled={statusBusy} className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors disabled:opacity-50 ${s === 'CANCELLED' || s === 'RETURNED' ? 'bg-red-100 text-red-700 hover:bg-red-200' : 'bg-ocre-600 text-white hover:bg-ocre-700'}`}>
                     {statusBusy ? '...' : ORDER_STATUS_LABELS[s]}
                   </button>
                 ))}
@@ -286,10 +381,10 @@ function OrderDetail({
   );
 }
 
-function SuborderCard({ group, supplierName, items, onChanged }: { group: OrderSupplierGroup; supplierName: string; items: OrderItem[]; onChanged: () => void }) {
+function SuborderCard({ group, supplierName, items, onChanged, canEdit }: { group: OrderSupplierGroup; supplierName: string; items: OrderItem[]; onChanged: () => void; canEdit: boolean }) {
   const toast = useToast();
   const [busy, setBusy] = useState(false);
-  const nextStatuses = SUBORDER_STATUS_FLOW[group.status] ?? [];
+  const nextStatuses = canEdit ? (SUBORDER_STATUS_FLOW[group.status] ?? []) : [];
 
   const changeStatus = async (status: string) => {
     setBusy(true);

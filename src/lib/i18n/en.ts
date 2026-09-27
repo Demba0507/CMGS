@@ -35,7 +35,7 @@ const en: Record<TranslationKey, string> = {
   'account.logout': 'Log out',
   'account.edit_profile': 'Edit my profile',
 
-  'chatbot.greeting': "Hello 😊 Welcome to CMGS! I can help you find a product, check a price, or place an order. What are you looking for?",
+  'chatbot.greeting': "Hello 😊 Welcome to RATELAFRICA! I can help you find a product, check a price, or place an order. What are you looking for?",
   'chatbot.placeholder': 'Type your message...',
 
   'common.cancel': 'Cancel',
