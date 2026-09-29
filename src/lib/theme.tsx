@@ -15,8 +15,18 @@ function getInitialTheme(): Theme {
   if (typeof window === 'undefined') return 'light';
   const stored = window.localStorage.getItem(STORAGE_KEY);
   if (stored === 'dark' || stored === 'light') return stored;
-  return window.matchMedia?.('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+  // L'application s'ouvre en mode clair par défaut, même si le système
+  // d'exploitation du visiteur est réglé en mode sombre. Le mode sombre
+  // reste disponible manuellement via le bouton de bascule.
+  return 'light';
 }
+
+// function getInitialTheme(): Theme {
+//   if (typeof window === 'undefined') return 'light';
+//   const stored = window.localStorage.getItem(STORAGE_KEY);
+//   if (stored === 'dark' || stored === 'light') return stored;
+//   return window.matchMedia?.('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+// }
 
 export function ThemeProvider({ children }: { children: ReactNode }) {
   const [theme, setThemeState] = useState<Theme>(getInitialTheme);

@@ -1190,6 +1190,9 @@ function CheckoutPage({ cart, total, onBack, onComplete }: {
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
   const [neighborhood, setNeighborhood] = useState('');
+  const [customNeighborhood, setCustomNeighborhood] = useState('');
+  const isOtherNeighborhood = neighborhood === '__other__';
+  const effectiveNeighborhood = isOtherNeighborhood ? customNeighborhood.trim() : neighborhood;
   const [address, setAddress] = useState('');
   const [locationShared, setLocationShared] = useState(false);
   const [locationError, setLocationError] = useState<string | null>(null);
@@ -1233,8 +1236,10 @@ function CheckoutPage({ cart, total, onBack, onComplete }: {
   const grandTotal = total + deliveryFee;
 
   const handleSubmit = async () => {
-    if (!name || !phone || !neighborhood) {
-      setError('Veuillez remplir le nom, le téléphone et le quartier.');
+    if (!name || !phone || !effectiveNeighborhood) {
+      setError(isOtherNeighborhood && !customNeighborhood.trim()
+        ? 'Veuillez préciser le nom de votre quartier.'
+        : 'Veuillez remplir le nom, le téléphone et le quartier.');
       return;
     }
     setLoading(true);
@@ -1244,7 +1249,7 @@ function CheckoutPage({ cart, total, onBack, onComplete }: {
       await createPublicCheckout({ 
         name, 
         phone, 
-        neighborhood, 
+        neighborhood: effectiveNeighborhood, 
         address, 
         paymentMethod, 
         items: cart.map((item) => ({ product_id: item.product.id, quantity: item.quantity, variant_id: item.variant?.id ?? null })) 
@@ -1300,7 +1305,17 @@ function CheckoutPage({ cart, total, onBack, onComplete }: {
                 >
                   <option value="">Sélectionner...</option>
                   {BAMAKO_NEIGHBORHOODS.map((n) => <option key={n} value={n}>{n}</option>)}
+                  <option value="__other__">Autre (préciser)</option>
                 </select>
+                {isOtherNeighborhood && (
+                  <input
+                    className="input w-full px-4 py-3 rounded-xl border border-slate-200 dark:border-sand-700 focus:border-amber-400 focus:ring-2 focus:ring-amber-400/20 transition-all bg-white/50 dark:bg-sand-800 backdrop-blur-sm mt-2"
+                    value={customNeighborhood}
+                    onChange={(e) => setCustomNeighborhood(e.target.value)}
+                    placeholder="Nom de votre quartier"
+                    autoFocus
+                  />
+                )}
               </div>
               <div>
                 <label className="label text-sm font-medium text-slate-600 dark:text-sand-300 mb-1.5 block">{t('checkout.address')}</label>
