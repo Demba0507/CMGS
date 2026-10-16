@@ -21,15 +21,6 @@ const ENTRIES: TrashEntry[] = [
   { id: 'orders', label: 'Commandes', table: 'orders', navigateTo: 'orders', icon: ShoppingCart, permission: 'orders.delete' },
 ];
 
-/**
- * Étape 48 — corrige un vrai lien mort : "Corbeille" existait dans le menu
- * (§46) mais ne menait nulle part, aucune route ne le gérait. Plutôt que
- * de dupliquer restaurer/purger pour chaque type d'élément (déjà bien
- * fait et testé dans chaque page dédiée — stock à re-réserver pour
- * produits/commandes, sauvegarde requise pour les purges, etc.), cette
- * page ne fait qu'un point d'entrée clair : un compte par type d'élément,
- * avec un lien vers sa page pour restaurer/purger réellement.
- */
 export default function TrashOverviewPage({ onNavigate }: { onNavigate: (id: string) => void }) {
   const { has } = usePermissions();
   const [counts, setCounts] = useState<Record<string, number>>({});

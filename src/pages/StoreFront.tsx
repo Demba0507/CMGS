@@ -321,7 +321,7 @@ export default function StoreFront() {
               <h4 className="font-semibold text-white mb-3 text-sm">Contact</h4>
               <ul className="space-y-3 text-sm">
                 <li className="flex items-center gap-3 hover:text-amber-400 transition-colors">
-                  <Phone className="w-4 h-4 text-amber-400" /> +223 76 00 00 00
+                  <Phone className="w-4 h-4 text-amber-400" /> +223 77 02 53 03 / 91 29 77 23
                 </li>
                 <li className="flex items-center gap-3 hover:text-amber-400 transition-colors">
                   <MapPin className="w-4 h-4 text-amber-400" /> Bamako, Mali
